@@ -3,11 +3,13 @@ import {
   uniform,
   float,
   vec3,
+  vec4,
   sin,
   length,
   mix,
   color,
   positionLocal,
+  screenUV,
   time,
 } from 'three/tsl'
 
@@ -35,11 +37,9 @@ export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms }
 
   const displacedPosition = vec3(x, wave, z)
 
-  const colorLow  = color(0x0033aa)
-  const colorHigh = color(0x00ffcc)
   const t01 = wave.div(uAmplitude).mul(0.5).add(0.5)
-  const finalColor = mix(colorLow, colorHigh, t01)
-
+  const finalColor = vec4(screenUV.x, t01, screenUV.y, 1.0)
+  
   // material
   const material = new THREE.MeshBasicNodeMaterial({ wireframe: false })
   material.positionNode = displacedPosition
