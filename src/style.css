@@ -1,0 +1,9 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #1a1a1a;
+}
+#app {
+  width: 100vw;
+  height: 100vh;
+}
