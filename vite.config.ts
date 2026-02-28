@@ -6,5 +6,10 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
     exclude: ['three']
+  },
+  server: {
+    watch: {
+      usePolling: true
+    }
   }
 })

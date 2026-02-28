@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { createTerrain } from './createTerrain'
+import { createShaderCanvas, createTerrain } from './createTerrain'
 import { createPane } from './createPane'
 
 export function initScene(canvas: HTMLCanvasElement): () => void {
@@ -8,10 +8,11 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: true })
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.setPixelRatio(devicePixelRatio)
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+  renderer.toneMapping = THREE.NoToneMapping
 
 
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x111111)
 
   const camera = new THREE.PerspectiveCamera(
     60,
@@ -22,6 +23,11 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
   camera.position.set(0, 12, 20)
   camera.lookAt(0, 0, 0)
 
+  const shaderMesh = createShaderCanvas()
+
+  camera.add(shaderMesh)
+  shaderMesh.position.set(0, 0, -0.8)
+  scene.add(camera)
 
   const controls = new OrbitControls(camera, canvas)
   controls.enableDamping = true
@@ -29,10 +35,10 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
   controls.minDistance = 5
   controls.maxDistance = 60
 
-  const { mesh, uniforms } = createTerrain()
-  scene.add(mesh)
+  // const { mesh, uniforms } = createTerrain()
+  // scene.add(mesh)
 
-  const pane = createPane(uniforms, mesh.material as THREE.MeshBasicNodeMaterial)
+  // const pane = createPane(uniforms, mesh.material as THREE.MeshBasicNodeMaterial)
 
   const onResize = () => {
     camera.aspect = window.innerWidth / window.innerHeight
@@ -52,7 +58,7 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
     renderer.setAnimationLoop(null)
     window.removeEventListener('resize', onResize)
     controls.dispose()
-    pane.dispose()
+    // pane.dispose()
     renderer.dispose()
   }
 }
