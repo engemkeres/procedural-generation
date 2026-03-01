@@ -24,7 +24,8 @@ import {
   PI,
   fract,
   floor,
-  uv
+  uv,
+  distance
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -122,7 +123,11 @@ export function createShaderCanvas(): THREE.Mesh {
       colorIn: color(0x3d3d3d)
     })
 
-    material.colorNode = vec4(foreground, 1.0)
+    let pct = distance(st.mul(2.0), vec2(1.0))
+    let heartbeat = sin(time.mul(PI)).mul(0.5).add(0.5).div(5)
+    let circleColor = vec3(smoothstep(float(0.5).sub(heartbeat), float(0.5).add(heartbeat), pct))
+
+    material.colorNode = vec4(circleColor, 1.0)
 
     const mesh = new THREE.Mesh(geometry, material)
     return mesh
