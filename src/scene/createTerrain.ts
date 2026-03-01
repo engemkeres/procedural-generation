@@ -25,7 +25,9 @@ import {
   fract,
   floor,
   uv,
-  distance
+  distance,
+  min,
+  max
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -108,26 +110,12 @@ export function createShaderCanvas(): THREE.Mesh {
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
-    const st = uv()
+    let st = vec2(uv().x, uv().y)
 
-    let background = drawSquare({
-      limBottomLeft: 0.1, 
-      limTopRight: 0.1, 
-      colorOut: color(0x3d3d3d), 
-      colorIn: color(0xf8485e)})
+    st = st.mul(2).sub(1)
+    let d = length(max(abs(st).sub(0.3),0.))
 
-    let foreground = drawSquare({
-      limBottomLeft: 0.2,
-      limTopRight: 0.2,
-      colorOut: background,
-      colorIn: color(0x3d3d3d)
-    })
-
-    let pct = distance(st.mul(2.0), vec2(1.0))
-    let heartbeat = sin(time.mul(PI)).mul(0.5).add(0.5).div(5)
-    let circleColor = vec3(smoothstep(float(0.5).sub(heartbeat), float(0.5).add(heartbeat), pct))
-
-    material.colorNode = vec4(circleColor, 1.0)
+    material.colorNode = vec4(vec3(fract(d.mul(10).sub(time))), 1.0)
 
     const mesh = new THREE.Mesh(geometry, material)
     return mesh
