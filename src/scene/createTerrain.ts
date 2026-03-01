@@ -22,9 +22,10 @@ import {
   log,
   sqrt,
   PI,
-  fract
+  fract,
+  floor,
+  uv
 } from 'three/tsl'
-import { Sequence } from 'three/examples/jsm/libs/tween.module.js'
 
 export interface TerrainUniforms {
   uFrequency: ReturnType<typeof uniform>
@@ -78,31 +79,50 @@ export function createShaderCanvas(): THREE.Mesh {
       )
     })
 
+    const stepVec2 = Fn(({filter, value}: {filter: any, value: any}) => {
+      return vec2(
+        step(filter.x, value.x),
+        step(filter.y, value.y)
+      )
+    })
+
+    const drawSquare = Fn(({
+      limBottomLeft, limTopRight, colorOut, colorIn}: {
+        limBottomLeft: any, 
+        limTopRight: any, 
+        colorOut: any, 
+        colorIn: any
+    }) => {
+      const bl = stepVec2({filter: vec2(limBottomLeft), value: st})
+      const tr = stepVec2({filter: vec2(limTopRight), value: vec2(1.0).sub(st)})
+      let pct = bl.x.mul(bl.y).mul(tr.x).mul(tr.y)
+      let fillColor = mix(colorOut, colorIn, pct)
+      return fillColor
+    })
+
     const plot = Fn(({ st, pct }: {st: any, pct: any}) => {
         return smoothstep(pct.sub(float(0.01)), pct, st.y).sub(smoothstep(pct, pct.add(float(0.01)), st.y))
     })
 
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
-    const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
+    // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
+    // this is simply the coords of the actual viewed mesh
+    const st = uv()
 
-    const x = st.x //.sub(0.5).mul(2.0)
+    let background = drawSquare({
+      limBottomLeft: 0.1, 
+      limTopRight: 0.1, 
+      colorOut: color(0x3d3d3d), 
+      colorIn: color(0xf8485e)})
 
-    const pct = vec3(
-      smoothstep(0.0, 1.0, x),  // red
-      sin(x.mul(PI)),           // green
-      float(1.0).sub(pow(x, 0.5))               // blue
-    )
+    let foreground = drawSquare({
+      limBottomLeft: 0.2,
+      limTopRight: 0.2,
+      colorOut: background,
+      colorIn: color(0x3d3d3d)
+    })
 
-    const colorA = vec3(0.0, 0.0, 0.0)
-    const colorB = vec3(1.0,1.0,1.0)
-
-    let colorFinal =  mixVec3({a: colorA, b: colorB, t: pct})
-
-    colorFinal = mix(colorFinal, vec3(1.0, 0.0, 0.0), plot({st, pct: pct.x}))
-    colorFinal = mix(colorFinal, vec3(0.0, 1.0, 0.0), plot({st, pct: pct.y}))
-    colorFinal = mix(colorFinal, vec3(0.0, 0.0, 1.0), plot({st, pct: pct.z}))
-
-    material.colorNode = vec4(colorFinal, 1.0)
+    material.colorNode = vec4(foreground, 1.0)
 
     const mesh = new THREE.Mesh(geometry, material)
     return mesh

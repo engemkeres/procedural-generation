@@ -13,6 +13,7 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
 
 
   const scene = new THREE.Scene()
+  scene.background = new THREE.Color(0x111111)
 
   const camera = new THREE.PerspectiveCamera(
     60,
@@ -26,7 +27,8 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
   const shaderMesh = createShaderCanvas()
 
   camera.add(shaderMesh)
-  shaderMesh.position.set(0, 0, -0.8)
+  shaderMesh.position.set(0, 0, -2)
+  shaderMesh.scale.set(1, 1, 1)
   scene.add(camera)
 
   const controls = new OrbitControls(camera, canvas)
