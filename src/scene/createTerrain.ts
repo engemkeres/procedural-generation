@@ -109,26 +109,45 @@ export function createShaderCanvas(): THREE.Mesh {
         return smoothstep(pct.sub(float(0.01)), pct, st.y).sub(smoothstep(pct, pct.add(float(0.01)), st.y))
     })
 
+    const smoothstepVec2 = Fn(({edge0, edge1, x}: {edge0: any, edge1: any, x:any}) => {
+      return vec2(
+        smoothstep(edge0.x, edge1.x, x.x),
+        smoothstep(edge0.y, edge1.y, x.y)
+      )
+    })
+
+    const box = Fn(({st, size}: {st: any, size: any}) => {
+        const s = vec2(0.5).sub(size.mul(0.5))
+        const sEdge = s.add(vec2(0.001))
+        
+        let uv: any = smoothstepVec2({edge0: s, edge1: sEdge, x:st})
+        uv = uv.mul(
+          smoothstepVec2({edge0: s, edge1: sEdge, x: vec2(1.0).sub(st)})
+        )
+
+        return uv.x.mul(uv.y)
+    })
+
+    const cross = Fn(({st, size}: {st:any, size:any}) => {
+        return box({st, size: vec2(size, size.div(4.))}).add(
+              box({st, size: vec2(size.div(4.), size)})
+        )
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
-    const st = vec2(
+    let st = vec2(
       uv().x,
       uv().y
     )
+    let color: any = vec3(0.0)
 
-    let stRemapped = st.mul(2.0).sub(1)
+    const translate = vec2(cos(time), sin(time))
+    st = st.add(translate.mul(0.35))
 
-    let N = 3
-
-    let a = atan(stRemapped.x, stRemapped.y).add(PI)
-    let r = PI.mul(2.0).div(float(N))
-
-    let d = cos(
-      floor(float(.5).add(a.div(r))).mul(r).sub(a)
-    ).mul(length(stRemapped))
-
-    let color = vec3(float(1.).sub(smoothstep(.4, .41, d)))
+    color = vec3(st.x, st.y, 0.)
+    color = color.add(vec3(cross({st, size: float(0.25)})))
 
     material.colorNode = vec4(color, 1.)
 
