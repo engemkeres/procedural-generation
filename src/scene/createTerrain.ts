@@ -28,7 +28,8 @@ import {
   distance,
   min,
   max,
-  atan
+  atan,
+  viewportResolution
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -111,15 +112,23 @@ export function createShaderCanvas(): THREE.Mesh {
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
-    let st = vec2(uv().x, uv().y)
+    const st = vec2(
+      uv().x,
+      uv().y
+    )
 
-    let pos = vec2(0.5).sub(st)
-    let r = length(pos).mul(2.)
-    let a = atan(pos.y, pos.x)
+    let stRemapped = st.mul(2.0).sub(1)
 
-    let f = abs(cos(a.mul(12.).add(time.mul(PI).mul(0.2))).mul(sin(a.mul(3).add(time.mul(PI).mul(0.5))))).mul(.8).add(.1)
+    let N = 3
 
-    let color = vec3(float(1.).sub(smoothstep(f, f.add(.02), r)))
+    let a = atan(stRemapped.x, stRemapped.y).add(PI)
+    let r = PI.mul(2.0).div(float(N))
+
+    let d = cos(
+      floor(float(.5).add(a.div(r))).mul(r).sub(a)
+    ).mul(length(stRemapped))
+
+    let color = vec3(float(1.).sub(smoothstep(.4, .41, d)))
 
     material.colorNode = vec4(color, 1.)
 
