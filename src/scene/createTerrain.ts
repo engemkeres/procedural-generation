@@ -142,6 +142,12 @@ export function createShaderCanvas(): THREE.Mesh {
                               sin(angle), cos(angle))
     })
 
+    const scale2D = Fn(({scale}: {scale: any}) => {
+        return (mat2 as any)( scale.x, 0.0,
+                              0.0, scale.y
+        )
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -149,15 +155,18 @@ export function createShaderCanvas(): THREE.Mesh {
       uv().x,
       uv().y
     )
-    let color: any = vec3(0.0)
+    let col: any = vec3(0.0)
 
     // move space from center to (0,0), rotate space, move it back
     st = st.sub(vec2(0.5))
     st = rotate2D({angle: sin(time).mul(PI)}).mul(st)
+    st = scale2D({scale: vec2(sin(time).add(1.0))}).mul(st)
     st = st.add(vec2(0.5))
 
-    color = color.add(vec3(cross({st, size:float(0.4)})))
-    material.colorNode = vec4(color, 1.)
+    col = vec3(st.x, st.y, 0.0)
+
+    col = col.add(vec3(cross({st, size:float(0.2)})))
+    material.colorNode = vec4(col, 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
     return mesh

@@ -8,7 +8,7 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: true })
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.setPixelRatio(devicePixelRatio)
-  renderer.outputColorSpace = THREE.SRGBColorSpace
+  renderer.outputColorSpace = THREE.LinearSRGBColorSpace
   renderer.toneMapping = THREE.NoToneMapping
 
 
@@ -21,13 +21,13 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
     0.1,
     1000
   )
-  camera.position.set(0, 12, 20)
+  camera.position.set(0, 0, 0)
   camera.lookAt(0, 0, 0)
 
   const shaderMesh = createShaderCanvas()
 
   camera.add(shaderMesh)
-  shaderMesh.position.set(0, 0, -2)
+  shaderMesh.position.set(0, 0, -1.8)
   shaderMesh.scale.set(1, 1, 1)
   scene.add(camera)
 
