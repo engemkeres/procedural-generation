@@ -5,6 +5,9 @@ import {
   vec2,
   vec3,
   vec4,
+  mat2,
+  mat3,
+  mat4,
   sin,
   cos,
   length,
@@ -77,18 +80,18 @@ export function createShaderCanvas(): THREE.Mesh {
     const material = new THREE.MeshBasicNodeMaterial()
 
     const mixVec3 = Fn(({a, b, t}: {a: any, b:any, t:any}) => {
-      return vec3(
-        mix(a.r, b.r, t.r),
-        mix(a.g, b.g, t.g),
-        mix(a.b, b.b, t.b)
-      )
+        return vec3(
+          mix(a.r, b.r, t.r),
+          mix(a.g, b.g, t.g),
+          mix(a.b, b.b, t.b)
+        )
     })
 
     const stepVec2 = Fn(({filter, value}: {filter: any, value: any}) => {
-      return vec2(
-        step(filter.x, value.x),
-        step(filter.y, value.y)
-      )
+        return vec2(
+          step(filter.x, value.x),
+          step(filter.y, value.y)
+        )
     })
 
     const drawSquare = Fn(({
@@ -98,11 +101,11 @@ export function createShaderCanvas(): THREE.Mesh {
         colorOut: any, 
         colorIn: any
     }) => {
-      const bl = stepVec2({filter: vec2(limBottomLeft), value: st})
-      const tr = stepVec2({filter: vec2(limTopRight), value: vec2(1.0).sub(st)})
-      let pct = bl.x.mul(bl.y).mul(tr.x).mul(tr.y)
-      let fillColor = mix(colorOut, colorIn, pct)
-      return fillColor
+        const bl = stepVec2({filter: vec2(limBottomLeft), value: st})
+        const tr = stepVec2({filter: vec2(limTopRight), value: vec2(1.0).sub(st)})
+        let pct = bl.x.mul(bl.y).mul(tr.x).mul(tr.y)
+        let fillColor = mix(colorOut, colorIn, pct)
+        return fillColor
     })
 
     const plot = Fn(({ st, pct }: {st: any, pct: any}) => {
@@ -110,10 +113,10 @@ export function createShaderCanvas(): THREE.Mesh {
     })
 
     const smoothstepVec2 = Fn(({edge0, edge1, x}: {edge0: any, edge1: any, x:any}) => {
-      return vec2(
-        smoothstep(edge0.x, edge1.x, x.x),
-        smoothstep(edge0.y, edge1.y, x.y)
-      )
+        return vec2(
+          smoothstep(edge0.x, edge1.x, x.x),
+          smoothstep(edge0.y, edge1.y, x.y)
+        )
     })
 
     const box = Fn(({st, size}: {st: any, size: any}) => {
@@ -134,6 +137,11 @@ export function createShaderCanvas(): THREE.Mesh {
         )
     })
 
+    const rotate2D = Fn(({angle}: {angle:any}) => {
+        return (mat2 as any)( cos(angle), sin(angle).negate(),
+                              sin(angle), cos(angle))
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -143,12 +151,12 @@ export function createShaderCanvas(): THREE.Mesh {
     )
     let color: any = vec3(0.0)
 
-    const translate = vec2(cos(time), sin(time))
-    st = st.add(translate.mul(0.35))
+    // move space from center to (0,0), rotate space, move it back
+    st = st.sub(vec2(0.5))
+    st = rotate2D({angle: sin(time).mul(PI)}).mul(st)
+    st = st.add(vec2(0.5))
 
-    color = vec3(st.x, st.y, 0.)
-    color = color.add(vec3(cross({st, size: float(0.25)})))
-
+    color = color.add(vec3(cross({st, size:float(0.4)})))
     material.colorNode = vec4(color, 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
