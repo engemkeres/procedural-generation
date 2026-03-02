@@ -27,7 +27,8 @@ import {
   uv,
   distance,
   min,
-  max
+  max,
+  atan
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -112,10 +113,15 @@ export function createShaderCanvas(): THREE.Mesh {
     // this is simply the coords of the actual viewed mesh
     let st = vec2(uv().x, uv().y)
 
-    st = st.mul(2).sub(1)
-    let d = length(max(abs(st).sub(0.3),0.))
+    let pos = vec2(0.5).sub(st)
+    let r = length(pos).mul(2.)
+    let a = atan(pos.y, pos.x)
 
-    material.colorNode = vec4(vec3(fract(d.mul(10).sub(time))), 1.0)
+    let f = abs(cos(a.mul(12.).add(time.mul(PI).mul(0.2))).mul(sin(a.mul(3).add(time.mul(PI).mul(0.5))))).mul(.8).add(.1)
+
+    let color = vec3(float(1.).sub(smoothstep(f, f.add(.02), r)))
+
+    material.colorNode = vec4(color, 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
     return mesh
