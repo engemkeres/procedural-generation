@@ -32,7 +32,8 @@ import {
   min,
   max,
   atan,
-  viewportResolution
+  viewportResolution,
+  mod
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -137,9 +138,14 @@ export function createShaderCanvas(): THREE.Mesh {
         )
     })
 
-    const rotate2D = Fn(({angle}: {angle:any}) => {
-        return (mat2 as any)( cos(angle), sin(angle).negate(),
-                              sin(angle), cos(angle))
+    const rotate2D = Fn(({st, angle}: {st: any, angle:any}) => {
+        st = st.sub(vec2(0.5))
+        st = (mat2 as any)(
+          cos(angle), sin(angle).negate(), 
+          sin(angle), cos(angle)
+        ).mul(st)
+        st = st.add(vec2(0.5))
+        return st
     })
 
     const scale2D = Fn(({scale}: {scale: any}) => {
@@ -148,24 +154,36 @@ export function createShaderCanvas(): THREE.Mesh {
         )
     })
 
+    const tile2D = Fn(({st, x, y}: {st: any, x: any, y: any}) => {
+        return fract(
+          st.mul(vec2(x, y))
+        )
+    })
+
+    const brickTile = Fn(({st, zoom}: {st: any, zoom: any}) => {
+        st = st.mul(zoom)
+        st = st.add(vec2(
+            step(1., mod(st.y, 2.0)).mul(.5),
+            0.0
+        ))
+        return fract(st)
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
-    let st = vec2(
+    let st: any = vec2(
       uv().x,
       uv().y
     )
     let col: any = vec3(0.0)
 
-    // move space from center to (0,0), rotate space, move it back
-    st = st.sub(vec2(0.5))
-    st = rotate2D({angle: sin(time).mul(PI)}).mul(st)
-    st = scale2D({scale: vec2(sin(time).add(1.0))}).mul(st)
-    st = st.add(vec2(0.5))
+    st = tile2D({st, x: 4.0, y: 4.0})
 
-    col = vec3(st.x, st.y, 0.0)
+    st = rotate2D({st, angle: PI.mul(.25)})
 
-    col = col.add(vec3(cross({st, size:float(0.2)})))
+    col = vec3(box({st, size:vec2(float(0.7).add(sin(time).div(10.0)))}))
+
     material.colorNode = vec4(col, 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
