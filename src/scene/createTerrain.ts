@@ -33,7 +33,8 @@ import {
   max,
   atan,
   viewportResolution,
-  mod
+  mod,
+  select
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -169,6 +170,41 @@ export function createShaderCanvas(): THREE.Mesh {
         return fract(st)
     })
 
+    const rotateTilePattern = Fn(({st}: {st: any}) => {
+        
+        st = st.mul(2.)
+
+        // index for each cell
+        let index: any = float(0.0)
+        index = index.add(
+            step(1.0, mod(st.x, 2.0))
+        )
+        index = index.add(
+            step(1.0, mod(st.y, 2.0)).mul(2.0)
+        )
+
+        //  2 | 3
+        //--------
+        //  0 | 1
+
+        // each cell between 0.0 - 1.0
+        st = fract(st)
+
+        // rotate each according to index
+        // select (cond, ifTrue, ifFalse) instead of if
+        // if also works tho
+        const st1 = rotate2D({st, angle: PI.mul(0.5)})
+        const st2 = rotate2D({st, angle: PI.mul(-0.5)})
+        const st3 = rotate2D({st, angle: PI})
+
+        st =  select(index.equal(1.0), st1,
+              select(index.equal(2.0), st2,
+              select(index.equal(3.0), st3,
+              st)))
+
+        return st
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -178,11 +214,15 @@ export function createShaderCanvas(): THREE.Mesh {
     )
     let col: any = vec3(0.0)
 
-    st = st.div(vec2(2.15, 0.65).div(1.5))
+    st = tile2D({st, x: 3.0, y: 3.0})
+    st = rotateTilePattern({st})
 
-    st = brickTile({st, zoom: 5.0})
+    st = tile2D({st, x: 2.0, y: 2.0})
+    st = rotate2D({st, angle: PI.negate().mul(time).mul(.25)})
+    st = rotateTilePattern({st: st.mul(2.0)})
+    st = rotate2D({st, angle: PI.mul(time).mul(.25)})
 
-    col = vec3(box({st, size: vec2(0.95)}))
+    col = vec3(step(st.x, st.y))
 
     material.colorNode = vec4(col, 1.)
 
