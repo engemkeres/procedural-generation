@@ -34,7 +34,8 @@ import {
   atan,
   viewportResolution,
   mod,
-  select
+  select,
+  dot
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -205,6 +206,19 @@ export function createShaderCanvas(): THREE.Mesh {
         return st
     })
 
+    const uMouse = uniform(new THREE.Vector2(0, 0))
+
+    window.addEventListener('mousemove', (e) => {
+        uMouse.value.x = e.clientX / window.innerWidth
+        uMouse.value.y = 1.0 - (e.clientY / window.innerHeight)
+    })
+
+    const myRandom = Fn(({st}: {st: any}) => {
+        return fract(
+            sin(dot(st.xy, vec2(uMouse.x.mul(sin(time)), uMouse.y.mul(cos(time))))).mul(time)
+        )
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -214,15 +228,9 @@ export function createShaderCanvas(): THREE.Mesh {
     )
     let col: any = vec3(0.0)
 
-    st = tile2D({st, x: 3.0, y: 3.0})
-    st = rotateTilePattern({st})
+    let rnd = myRandom({st})
 
-    st = tile2D({st, x: 2.0, y: 2.0})
-    st = rotate2D({st, angle: PI.negate().mul(time).mul(.25)})
-    st = rotateTilePattern({st: st.mul(2.0)})
-    st = rotate2D({st, angle: PI.mul(time).mul(.25)})
-
-    col = vec3(step(st.x, st.y))
+    col = vec3(rnd)
 
     material.colorNode = vec4(col, 1.)
 
