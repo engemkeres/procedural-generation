@@ -35,7 +35,9 @@ import {
   viewportResolution,
   mod,
   select,
-  dot
+  dot,
+  notEqual, greaterThanEqual, greaterThan, equal, lessThanEqual, lessThan,
+  If
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -215,8 +217,28 @@ export function createShaderCanvas(): THREE.Mesh {
 
     const myRandom = Fn(({st}: {st: any}) => {
         return fract(
-            sin(dot(st.xy, vec2(uMouse.x.mul(sin(time)), uMouse.y.mul(cos(time))))).mul(time)
+            sin(dot(st.xy, vec2(12.9898,78.233))).mul(43758.5453123)
         )
+    })
+
+    const truchetPattern = Fn(({st, index}: {st: any, index: any}) => {
+        index = fract((index.sub(.5).mul(time)))
+        
+        // .toVar() for mutable GPU variable
+        const result = vec2(st).toVar()
+
+        // () => {} means this is builder for GPU branch, not JS logic
+        If(index.greaterThan(0.75), () => {
+            result.assign(vec2(1.0).sub(st))
+        }) // if returns node so I can chain them
+        .ElseIf(index.greaterThan(.5), () => {
+            result.assign(vec2(float(1.0).sub(st.x), st.y))
+        })
+        .ElseIf(index.greaterThan(.25), () => {
+            result.assign(vec2(st.x, float(1.0).sub(st.y)))
+        })
+
+        return result
     })
 
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
@@ -226,13 +248,25 @@ export function createShaderCanvas(): THREE.Mesh {
       uv().x,
       uv().y
     )
-    let col: any = vec3(0.0)
+    let col: any = float(0.0)
 
-    let rnd = myRandom({st})
+    st = st.mul(10)
+    const ipos = floor(st)
+    const fpos = fract(st)
 
-    col = vec3(rnd)
+    const tile = truchetPattern({st: fpos, index: myRandom({st: ipos})})
 
-    material.colorNode = vec4(col, 1.)
+    col = smoothstep(tile.x.sub(0.3), tile.x, tile.y).sub(
+          smoothstep(tile.x, tile.x.add(.3), tile.y)
+    )
+
+    col = step(length(tile), 0.6).sub(
+          step(length(tile), 0.4)).add(
+          step(length(tile.sub(vec2(1.))), .6).sub(
+          step(length(tile.sub(vec2(1.))), .4))
+          )
+
+    material.colorNode = vec4(vec3(col), 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
     return mesh
