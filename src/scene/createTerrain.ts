@@ -163,7 +163,7 @@ export function createShaderCanvas(): THREE.Mesh {
     const brickTile = Fn(({st, zoom}: {st: any, zoom: any}) => {
         st = st.mul(zoom)
         st = st.add(vec2(
-            step(1., mod(st.y, 2.0)).mul(.5),
+            step(1., mod(st.y, 2.0)).mul(time.mul(2.0)).sub(time),
             0.0
         ))
         return fract(st)
@@ -178,11 +178,11 @@ export function createShaderCanvas(): THREE.Mesh {
     )
     let col: any = vec3(0.0)
 
-    st = tile2D({st, x: 4.0, y: 4.0})
+    st = st.div(vec2(2.15, 0.65).div(1.5))
 
-    st = rotate2D({st, angle: PI.mul(.25)})
+    st = brickTile({st, zoom: 5.0})
 
-    col = vec3(box({st, size:vec2(float(0.7).add(sin(time).div(10.0)))}))
+    col = vec3(box({st, size: vec2(0.95)}))
 
     material.colorNode = vec4(col, 1.)
 
