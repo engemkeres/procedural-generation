@@ -300,6 +300,15 @@ export function createShaderCanvas(): THREE.Mesh {
         )
     })
 
+    const lines = Fn(({pos, b}: {pos: any, b: any}) => {
+        const scale = float(10.0)
+        pos = pos.mul(scale)
+        return smoothstep(  0.0, 
+                            b.mul(.5).add(.5),
+                            abs( (sin(pos.x.mul(PI)).add(b.mul(2.))).mul(.5) )
+                         )
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -309,11 +318,15 @@ export function createShaderCanvas(): THREE.Mesh {
     )
     let col: any = vec3(0.0)
 
-    const pos = vec2(st.mul(10.))
+    let pos = st.yx.mul(vec2(10., 3.))
 
-    col = vec3( gradientNoise({st: pos}).mul(.5).add(.5))
+    let pattern = pos.x
 
-    material.colorNode = vec4(col, 1.)
+    pos = rotate2D({st: pos, angle: noise2D({st: pos}) })
+
+    pattern = lines({pos, b:.5})
+
+    material.colorNode = vec4(vec3(pattern), 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
     return mesh
