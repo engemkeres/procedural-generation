@@ -222,6 +222,15 @@ export function createShaderCanvas(): THREE.Mesh {
         )
     })
 
+    const myRandom2 = Fn(({st}: {st: any}) => {
+        st = vec2(
+            dot(st, vec2(127.1, 311.7)),
+            dot(st, vec2(269.5, 183.3))
+        )
+
+        return fract(sin(st).mul(43758.5453123)).mul(2.0).sub(1.0)
+    })
+
     const truchetPattern = Fn(({st, index}: {st: any, index: any}) => {
         index = fract((index.sub(.5).mul(time)))
         
@@ -272,6 +281,25 @@ export function createShaderCanvas(): THREE.Mesh {
                 ))
     })
 
+    const gradientNoise = Fn(({st}: {st: any}) => {
+        const i = floor(st)
+        const f = fract(st)
+
+        const u: any = f.mul(f).mul(f.mul(2.).negate().add(3.))
+
+        const a: any = myRandom2({st: i})
+        const b: any = myRandom2({st: i.add(vec2(1.0, 0.0))})
+        const c: any = myRandom2({st: i.add(vec2(0.0, 1.0))})
+        const d: any = myRandom2({st: i.add(vec2(1.0, 1.0))})
+
+        return mix(
+            mix( dot( a, f.sub(vec2(0.0, 0.0))),
+                 dot( b, f.sub(vec2(1.0, 0.0))), u.x),
+            mix( dot( c, f.sub(vec2(0.0, 1.0))),
+                 dot( d, f.sub(vec2(1.0, 1.0))), u.x), u.y
+        )
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -279,13 +307,13 @@ export function createShaderCanvas(): THREE.Mesh {
       uv().x,
       uv().y
     )
-    let col: any = float(0.0)
+    let col: any = vec3(0.0)
 
-    const pos = vec2(st.mul(99999.).mul(uMouse.x))
+    const pos = vec2(st.mul(10.))
 
-    const n = noise2D({st: pos})
+    col = vec3( gradientNoise({st: pos}).mul(.5).add(.5))
 
-    material.colorNode = vec4(vec3(n), 1.)
+    material.colorNode = vec4(col, 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
     return mesh
