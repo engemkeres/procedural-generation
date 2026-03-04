@@ -37,7 +37,8 @@ import {
   select,
   dot,
   notEqual, greaterThanEqual, greaterThan, equal, lessThanEqual, lessThan,
-  If
+  If,
+  rand
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -241,6 +242,36 @@ export function createShaderCanvas(): THREE.Mesh {
         return result
     })
 
+    const myFirstSmoothNoise = Fn(({x}: {x: any}) => {
+        const i = floor(x)
+        const f = fract(x)
+        // fake hash random
+        const y = fract(sin(i).mul(43758.5453123))
+        const y1 = fract(sin(i.add(1.)).mul(43758.5453123))
+        // made up cubic curve
+        const u = f.mul(f).mul( float(3.0).sub(f.mul(2.0)) )
+
+        return mix(y, y1, u)
+    })
+
+    const noise2D = Fn(({st}: {st: any}) => {
+        const i = floor(st)
+        const f = fract(st)
+
+        // four corners of tile
+        const a = myRandom({st: i})
+        const b = myRandom({st: i.add(vec2(1.0, 0.0))})
+        const c = myRandom({st: i.add(vec2(0.0, 1.0))})
+        const d = myRandom({st: i.add(vec2(1.0, 1.0))})
+
+        const u: any = f.mul(f).mul(f.mul(2.).negate().add(3.))
+
+        return mix(a, b, u.x).add(
+                c.sub(a).mul(u.y).mul(float(1.0).sub(u.x)).add(
+                d.sub(b).mul(u.x).mul(u.y)
+                ))
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -250,23 +281,11 @@ export function createShaderCanvas(): THREE.Mesh {
     )
     let col: any = float(0.0)
 
-    st = st.mul(10)
-    const ipos = floor(st)
-    const fpos = fract(st)
+    const pos = vec2(st.mul(99999.).mul(uMouse.x))
 
-    const tile = truchetPattern({st: fpos, index: myRandom({st: ipos})})
+    const n = noise2D({st: pos})
 
-    col = smoothstep(tile.x.sub(0.3), tile.x, tile.y).sub(
-          smoothstep(tile.x, tile.x.add(.3), tile.y)
-    )
-
-    col = step(length(tile), 0.6).sub(
-          step(length(tile), 0.4)).add(
-          step(length(tile.sub(vec2(1.))), .6).sub(
-          step(length(tile.sub(vec2(1.))), .4))
-          )
-
-    material.colorNode = vec4(vec3(col), 1.)
+    material.colorNode = vec4(vec3(n), 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
     return mesh
