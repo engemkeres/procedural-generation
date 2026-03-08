@@ -420,6 +420,30 @@ export function createShaderCanvas(): { shaderMesh: THREE.Mesh; uniforms: Canvas
         return col
     })
 
+    const fbm = Fn(({st}: {st: any}) => {
+        const value = float(0.).toVar()
+        const amplitude = float(.5).toVar()
+        const frequency = float(1.0).toVar()
+        const stVar: any = vec2(st).toVar()
+
+        Loop(
+            {start: int(0), end: uOctaves, type:'int', condition: '<'},
+            ({i}) => {
+                value.addAssign(amplitude.mul(noise2D({st: stVar.mul(frequency)})))
+                frequency.mulAssign(2.)
+                amplitude.mulAssign(.5)
+            }
+        )
+
+        return value
+    })
+
+    const mainColor = Fn(() => {
+        const col: any = vec3(0.0)
+        col.addAssign(fbm({st: st.mul(3.)}))
+        return vec4(col, 1.)
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -428,7 +452,7 @@ export function createShaderCanvas(): { shaderMesh: THREE.Mesh; uniforms: Canvas
       uv().y
     )
 
-    material.colorNode = vec4(coloredVoronoi({st}), 1.)
+    material.colorNode = mainColor()
 
     const mesh = new THREE.Mesh(geometry, material)
     return {shaderMesh: mesh, uniforms: {uOctaves}}
