@@ -15,5 +15,6 @@ The `exercises` branch contains the TSL implementation of several exercises from
 - [TSL docs](https://www.goodtsl.com/en/docs)
 
 Examples:
-![26-03-09_003346](https://github.com/user-attachments/assets/281faf7d-5483-4c77-8557-9d7ee74dcab8)
-![26-03-09_003612](https://github.com/user-attachments/assets/b8a4de06-4da0-4560-970c-0fcb9ed07664)
+
+[<img src="https://github.com/user-attachments/assets/281faf7d-5483-4c77-8557-9d7ee74dcab8" width=50% title="Circle with a heartbeat" alt="Circle with a heartbeat"/>](https://github.com/user-attachments/assets/281faf7d-5483-4c77-8557-9d7ee74dcab8)
+[<img src="https://github.com/user-attachments/assets/b8a4de06-4da0-4560-970c-0fcb9ed07664" width=50% title="Square SDF" alt="Square SDF"/>](https://github.com/user-attachments/assets/b8a4de06-4da0-4560-970c-0fcb9ed07664)
