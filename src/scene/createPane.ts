@@ -1,33 +1,45 @@
 import { Pane } from 'tweakpane'
 import * as THREE from 'three/webgpu'
 import { TerrainUniforms } from './createTerrain'
+import { CanvasUniforms } from './createTerrain'
 
 export function createPane(
-  uniforms: TerrainUniforms,
+  uniforms: CanvasUniforms,
   material: THREE.MeshBasicNodeMaterial
 ): Pane {
-  const { uFrequency, uAmplitude, uSpeed } = uniforms
+  // const { uFrequency, uAmplitude, uSpeed } = uniforms
+
+  // const params = {
+  //   frequency: uFrequency.value as number,
+  //   amplitude: uAmplitude.value as number,
+  //   speed:     uSpeed.value as number,
+  //   wireframe: false,
+  // }
+
+  // const pane = new Pane({ title: 'Wave Controls' })
+
+  // pane.addBinding(params, 'frequency', { min: 0.01, max: 5.0, step: 0.01 })
+  //   .on('change', ({ value }) => { uFrequency.value = value })
+
+  // pane.addBinding(params, 'amplitude', { min: 0.0, max: 8.0, step: 0.1 })
+  //   .on('change', ({ value }) => { uAmplitude.value = value })
+
+  // pane.addBinding(params, 'speed', { min: 0.0, max: 5.0, step: 0.1 })
+  //   .on('change', ({ value }) => { uSpeed.value = value })
+
+  // pane.addBinding(params, 'wireframe')
+  //   .on('change', ({ value }) => { material.wireframe = value })
+
+  const {uOctaves} = uniforms
 
   const params = {
-    frequency: uFrequency.value as number,
-    amplitude: uAmplitude.value as number,
-    speed:     uSpeed.value as number,
-    wireframe: false,
+      points: uOctaves.value as number,
   }
 
-  const pane = new Pane({ title: 'Wave Controls' })
+  const pane = new Pane({ title: 'Octave controls'})
 
-  pane.addBinding(params, 'frequency', { min: 0.01, max: 5.0, step: 0.01 })
-    .on('change', ({ value }) => { uFrequency.value = value })
-
-  pane.addBinding(params, 'amplitude', { min: 0.0, max: 8.0, step: 0.1 })
-    .on('change', ({ value }) => { uAmplitude.value = value })
-
-  pane.addBinding(params, 'speed', { min: 0.0, max: 5.0, step: 0.1 })
-    .on('change', ({ value }) => { uSpeed.value = value })
-
-  pane.addBinding(params, 'wireframe')
-    .on('change', ({ value }) => { material.wireframe = value })
+  pane.addBinding(params, 'points', {min: 1, max: 5, step: 1})
+      .on('change', ({value}) => {uOctaves.value = value})
 
   return pane
 }

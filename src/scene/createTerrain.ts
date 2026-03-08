@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu'
 import {
   uniform,
+  int,
   float,
   vec2,
   vec3,
@@ -38,7 +39,9 @@ import {
   dot,
   notEqual, greaterThanEqual, greaterThan, equal, lessThanEqual, lessThan,
   If,
-  rand
+  rand,
+  array,
+  Loop
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -81,7 +84,11 @@ export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms }
   return { mesh, uniforms: { uFrequency, uAmplitude, uSpeed } }
 }
 
-export function createShaderCanvas(): THREE.Mesh {
+export interface CanvasUniforms {
+  uOctaves: ReturnType <typeof uniform>
+}
+
+export function createShaderCanvas(): { shaderMesh: THREE.Mesh; uniforms: CanvasUniforms} {
     const geometry = new THREE.PlaneGeometry(2, 2)
     const material = new THREE.MeshBasicNodeMaterial()
 
@@ -309,6 +316,26 @@ export function createShaderCanvas(): THREE.Mesh {
                          )
     })
 
+    const uOctaves = uniform(int(5))
+
+    const voronoi = Fn(({ st }: { st: any }) => {
+        const points = array([
+            vec2(0.83, 0.75),
+            vec2(0.60, 0.07),
+            vec2(0.28, 0.64),
+            vec2(0.31, 0.26),
+            uMouse
+        ])
+
+        const mDist = float(1.0).toVar()
+
+        Loop({ start: int(0), end: uOctaves, type: 'int', condition: '<' }, ({ i }) => {
+            mDist.assign(min(mDist, distance(st, points.element(i) as any)))
+        })
+
+        return mDist
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -316,18 +343,13 @@ export function createShaderCanvas(): THREE.Mesh {
       uv().x,
       uv().y
     )
+
     let col: any = vec3(0.0)
 
-    let pos = st.yx.mul(vec2(10., 3.))
+    col = col.add(voronoi({st}))
 
-    let pattern = pos.x
-
-    pos = rotate2D({st: pos, angle: noise2D({st: pos}) })
-
-    pattern = lines({pos, b:.5})
-
-    material.colorNode = vec4(vec3(pattern), 1.)
+    material.colorNode = vec4(col, 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
-    return mesh
+    return {shaderMesh: mesh, uniforms: {uOctaves}}
 }

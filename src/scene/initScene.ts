@@ -24,7 +24,7 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
   camera.position.set(0, 0, 0)
   camera.lookAt(0, 0, 0)
 
-  const shaderMesh = createShaderCanvas()
+  const {shaderMesh, uniforms} = createShaderCanvas()
 
   camera.add(shaderMesh)
   shaderMesh.position.set(0, 0, -1.8)
@@ -41,6 +41,7 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
   // scene.add(mesh)
 
   // const pane = createPane(uniforms, mesh.material as THREE.MeshBasicNodeMaterial)
+  const pane = createPane(uniforms, shaderMesh.material as THREE.MeshBasicNodeMaterial)
 
   const onResize = () => {
     camera.aspect = window.innerWidth / window.innerHeight
@@ -60,7 +61,7 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
     renderer.setAnimationLoop(null)
     window.removeEventListener('resize', onResize)
     controls.dispose()
-    // pane.dispose()
+    pane.dispose()
     renderer.dispose()
   }
 }
