@@ -13,3 +13,7 @@ The `exercises` branch contains the TSL implementation of several exercises from
 - [TSL wiki](https://github.com/mrdoob/three.js/wiki/Three.js-Shading-Language)
 - [three.js docs](https://threejs.org/docs/)
 - [TSL docs](https://www.goodtsl.com/en/docs)
+
+Examples:
+![26-03-09_003346](https://github.com/user-attachments/assets/281faf7d-5483-4c77-8557-9d7ee74dcab8)
+![26-03-09_003612](https://github.com/user-attachments/assets/b8a4de06-4da0-4560-970c-0fcb9ed07664)
