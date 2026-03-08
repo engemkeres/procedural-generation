@@ -380,6 +380,46 @@ export function createShaderCanvas(): { shaderMesh: THREE.Mesh; uniforms: Canvas
         return col
     })
 
+    const coloredVoronoi = Fn(({st}: {st: any}) => {
+        const point = array([
+            vec2(0.83, 0.75),
+            vec2(0.60, 0.07),
+            vec2(0.28, 0.64),
+            vec2(0.31, 0.26),
+            uMouse
+        ])
+
+        let col: any = vec3(0.0)
+
+        let mDist: any = float(1.).toVar()
+        let mPoint: any = vec2(0.).toVec2()
+
+        Loop(
+            {start: int(0), end: uOctaves, condition: '<'},
+            ({i}) => {
+                const dist = distance(st, point.element(i) as any)
+                If( dist.lessThan(mDist), () => {
+                    mDist.assign(dist)
+                    mPoint.assign(point.element(i))
+                })
+            }
+        )
+
+        // dist field to closest point
+        col = vec3(mDist.mul(2.))
+
+        // tint by closest
+        col = vec3(mPoint.r, mPoint.g, col.b)
+
+        // isolines
+        col = col.sub(abs(sin(mDist.mul(80.))).mul(.07))
+
+        // draw point center
+        col = col.add(float(1.).sub(step(.02, mDist)))
+
+        return col
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -388,9 +428,7 @@ export function createShaderCanvas(): { shaderMesh: THREE.Mesh; uniforms: Canvas
       uv().y
     )
 
-    st = st.mul(3.0)
-
-    material.colorNode = vec4(cellVoronoi({st}), 1.)
+    material.colorNode = vec4(coloredVoronoi({st}), 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
     return {shaderMesh: mesh, uniforms: {uOctaves}}
