@@ -365,9 +365,17 @@ export function createShaderCanvas(): { shaderMesh: THREE.Mesh; uniforms: Canvas
             }
         )
 
+        // draw min dist
         let col: any = vec3(mDist)
+
+        // draw cell center
         col = col.add(1.0).sub(step(.02, mDist))
-        col = col.add(vec3(1.0, 0.0, 0.0).mul(step(.98, fSt.x).add(step(.98, fSt.y))))
+
+        // draw grid
+        // col = col.add(vec3(1.0, 0.0, 0.0).mul(step(.98, fSt.x).add(step(.98, fSt.y))))
+
+        // iso circles
+        col = col.sub(step(.7, abs(sin(mDist.mul(27.))))).mul(.5)
 
         return col
     })
