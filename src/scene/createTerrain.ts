@@ -41,7 +41,8 @@ import {
   If,
   rand,
   array,
-  Loop
+  Loop,
+  TWO_PI
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -235,7 +236,7 @@ export function createShaderCanvas(): { shaderMesh: THREE.Mesh; uniforms: Canvas
             dot(st, vec2(269.5, 183.3))
         )
 
-        return fract(sin(st).mul(43758.5453123)).mul(2.0).sub(1.0)
+        return fract(sin(st).mul(43758.5453123))
     })
 
     const truchetPattern = Fn(({st, index}: {st: any, index: any}) => {
@@ -336,6 +337,41 @@ export function createShaderCanvas(): { shaderMesh: THREE.Mesh; uniforms: Canvas
         return mDist
     })
 
+    const cellVoronoi = Fn(({st}: {st: any}) => {
+        const iSt = floor(st)
+        const fSt: any = fract(st)
+
+        const mDist = float(1.0).toVar()
+
+        Loop(
+            { start: int(-1), end: int(1), type: 'int', condition: '<='},
+            { start: int(-1), end: int(1), type: 'int', condition: '<='},
+            ({ i, j }) => {
+                // neighbor place in the grid
+                const neighbor = vec2(float(j), float(i))
+
+                // rand pos from current and the neighbor place in the grid
+                let point: any = myRandom2({st: iSt.add(neighbor)})
+
+                // animation
+                point = sin(point.mul(TWO_PI).add(time)).mul(.5).add(.5)
+
+                // vector between pixel and the point
+                const diff = neighbor.add(point).sub(fSt)
+
+                // distance to the point
+                const dist = length(diff)
+                mDist.assign(min(mDist, dist))
+            }
+        )
+
+        let col: any = vec3(mDist)
+        col = col.add(1.0).sub(step(.02, mDist))
+        col = col.add(vec3(1.0, 0.0, 0.0).mul(step(.98, fSt.x).add(step(.98, fSt.y))))
+
+        return col
+    })
+
     // three.js screenUV Y axis is flipped compared to GLSL's gl_FragCoord
     // const st = vec2(screenUV.x, float(1.0).sub(screenUV.y))
     // this is simply the coords of the actual viewed mesh
@@ -344,11 +380,9 @@ export function createShaderCanvas(): { shaderMesh: THREE.Mesh; uniforms: Canvas
       uv().y
     )
 
-    let col: any = vec3(0.0)
+    st = st.mul(3.0)
 
-    col = col.add(voronoi({st}))
-
-    material.colorNode = vec4(col, 1.)
+    material.colorNode = vec4(cellVoronoi({st}), 1.)
 
     const mesh = new THREE.Mesh(geometry, material)
     return {shaderMesh: mesh, uniforms: {uOctaves}}
