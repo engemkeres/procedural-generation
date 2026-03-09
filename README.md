@@ -23,3 +23,4 @@ The `exercises` branch contains the TSL implementation of several exercises from
 [<img src="https://github.com/user-attachments/assets/64c990ab-ca0e-4e68-af1f-1f69d6b08e21" width=50% />](https://github.com/user-attachments/assets/64c990ab-ca0e-4e68-af1f-1f69d6b08e21)
 [<img src="https://github.com/user-attachments/assets/3c49991f-4a14-4a5a-b4a2-043aebdc9f12" width=50% />](https://github.com/user-attachments/assets/3c49991f-4a14-4a5a-b4a2-043aebdc9f12)
 [<img src="https://github.com/user-attachments/assets/fb11f299-638b-4227-91cd-b0bb161ac8da" width=50% />](https://github.com/user-attachments/assets/fb11f299-638b-4227-91cd-b0bb161ac8da)
+[<img src="https://github.com/user-attachments/assets/b76dc356-303a-46a5-ad99-6152c709ec2e" width=50% />](https://github.com/user-attachments/assets/b76dc356-303a-46a5-ad99-6152c709ec2e)
