@@ -7,6 +7,7 @@ import {
     length,
     mix, color,
     positionLocal,
+    cross, dot, normalize,
     screenUV, uv,
     time,
     abs, pow, exp, log, sqrt,
@@ -17,11 +18,13 @@ import {
     min, max,
     viewportResolution,
     select,
-    dot,
     notEqual, greaterThanEqual, greaterThan, equal, lessThanEqual, lessThan,
     If, Loop,
     rand,
     array,
+    EPSILON,
+    transformNormalToView, transformDirection,
+    normalView, positionView, cameraViewMatrix
 } from 'three/tsl'
 
 export interface TerrainUniforms {
@@ -40,39 +43,57 @@ export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms }
     const uOctaves      = uniform(int(5))
     const uLacunarity   = uniform(float(2.))
     const uGain         = uniform(float(.5))
-
-    const uMouse = uniform(new THREE.Vector2(0, 0))
-
-    window.addEventListener('mousemove', (e) => {
-        uMouse.value.x = e.clientX / window.innerWidth
-        uMouse.value.y = 1.0 - (e.clientY / window.innerHeight)
-    })
+    const uSunDir       = uniform(vec3(30, 40, 20))
 
     // coords of the plane I want to displace
     const xz = vec2(positionLocal.x, positionLocal.z)
 
-    // f(x,z) = a00 + a10*x + a01*z
-    const a00 = float(0.0)
-    const a10 = float(0.0)
-    const a01 = float(.5)
-    const basePlaneHeight = a00.add(a10.mul(positionLocal.x)).add(a01.mul(positionLocal.z))
+    const terrainHeight = Fn(({p}: {p: any }) => {
+        const h: any = fbm({st: p, uFrequency, uOctaves, uLacunarity, uGain})
+        const noiseHeight = h.mul(uAmplitude)
 
-    // basic fBM for basic terrain
-    const h: any = fbm({st: xz, uFrequency, uOctaves, uLacunarity, uGain})
-    const noiseHeight = h.mul(uAmplitude)
+        return noiseHeight
+    })
 
-    const wave = sin(positionLocal.x.add(time)).mul(cos(positionLocal.z)).mul(.5)
-
-    // const finalHeight = basePlaneHeight.add(noiseHeight).add(wave)
-    const finalHeight = noiseHeight //.add(wave)
+    const finalHeight = terrainHeight({p: xz})
     const displacedPosition = vec3(positionLocal.x, finalHeight, positionLocal.z)
 
-    let col: any = vec3(h)
+    // normal calculation
+    const eps = float(0.05)
+    const hC = finalHeight
+    const hX = terrainHeight({p: xz.add(vec2(eps, 0.0))})
+    const hZ = terrainHeight({p: xz.add(vec2(0.0, eps))})
+
+    const pC = vec3(positionLocal.x, hC, positionLocal.z)
+    const pX = vec3(positionLocal.x.add(eps), hX, positionLocal.z)
+    const pZ = vec3(positionLocal.x, hZ, positionLocal.z.add(eps))
+
+    const terrainNormal = normalize(cross(pZ.sub(pC), pX.sub(pC)))
+
+    // blinn-phong
+    const lightDirWorld = normalize(uSunDir)
+    const N = transformNormalToView(terrainNormal).normalize()
+    const L = transformNormalToView(lightDirWorld).normalize()
+    const V = positionView.negate().normalize()
+    const H = L.add(V).normalize()
+
+    const diffuse = dot(N, L).max(0.0)
+    const specular = float(0.0) //dot(N, H).max(0.0).pow(float(32.0))
+
+    const baseColor = color('#462f1c')
+    const uAmbient = float(0.1)
+    const uDiffuse = float(1.0)
+    const uSpecular = float(.0)
+
+    const litColor = baseColor.mul(uAmbient.add(diffuse.mul(uDiffuse)))
+        .add(vec3(specular.mul(uSpecular)))
+
 
     // material
-    const material = new THREE.MeshBasicNodeMaterial({ wireframe: false })
+    const material = new THREE.MeshBasicNodeMaterial({ wireframe: false})
     material.positionNode = displacedPosition
-    material.colorNode    = col
+    // material.normalNode   = transformNormalToView(terrainNormal)
+    material.colorNode    = litColor
     material.side         = THREE.DoubleSide
 
     // plane in the right orientation

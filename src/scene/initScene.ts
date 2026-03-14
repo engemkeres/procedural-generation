@@ -11,19 +11,35 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
     const renderer = new THREE.WebGPURenderer({ canvas, antialias: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.setPixelRatio(devicePixelRatio)
-    renderer.outputColorSpace = THREE.LinearSRGBColorSpace
-    renderer.toneMapping = THREE.NoToneMapping
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x111111)
+    const sun = new THREE.DirectionalLight(0xFFFFFF, 2.00)
+    sun.position.set(30, 40, 20)
+    sun.castShadow = true
+    sun.shadow.mapSize.set(2048, 2048)
+    sun.shadow.camera.left = -30
+    sun.shadow.camera.right = 30
+    sun.shadow.camera.top = 30
+    sun.shadow.camera.bottom = -30
+    sun.shadow.camera.near = 1
+    sun.shadow.camera.far = 120
+
+    sun.shadow.bias = -0.001
+    sun.shadow.normalBias = 0.05
+
+    scene.add(sun)
+    scene.add(new THREE.AmbientLight(0x8899aa, 0.25))
 
     const camera = new THREE.PerspectiveCamera(
-        60,
+        50,
         window.innerWidth / window.innerHeight,
         0.1,
         1000
     )
-    camera.position.set(20, 10, 20)
+    camera.position.set(15, 2, 15)
     camera.lookAt(0, 0, 0)
 
     const controls = new PointerLockControls(camera, canvas)
@@ -45,6 +61,8 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
     canvas.addEventListener('wheel', onWheel)
 
     const { mesh, uniforms } = createTerrain()
+    mesh.castShadow = true
+    mesh.receiveShadow = true
     scene.add(mesh)
 
     const pane = createPane(uniforms, mesh.material as THREE.MeshBasicNodeMaterial)
