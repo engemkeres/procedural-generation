@@ -51,10 +51,21 @@ export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms }
     // coords of the plane I want to displace
     const xz = vec2(positionLocal.x, positionLocal.z)
 
+    // f(x,z) = a00 + a10*x + a01*z
+    const a00 = float(0.0)
+    const a10 = float(0.0)
+    const a01 = float(.5)
+    const basePlaneHeight = a00.add(a10.mul(positionLocal.x)).add(a01.mul(positionLocal.z))
+
     // basic fBM for basic terrain
     const h: any = fbm({st: xz, uFrequency, uOctaves, uLacunarity, uGain})
-    const height = h.mul(uAmplitude)
-    const displacedPosition = vec3(positionLocal.x, height, positionLocal.z)
+    const noiseHeight = h.mul(uAmplitude)
+
+    const wave = sin(positionLocal.x.add(time)).mul(cos(positionLocal.z)).mul(.5)
+
+    // const finalHeight = basePlaneHeight.add(noiseHeight).add(wave)
+    const finalHeight = noiseHeight //.add(wave)
+    const displacedPosition = vec3(positionLocal.x, finalHeight, positionLocal.z)
 
     let col: any = vec3(h)
 
