@@ -6,7 +6,7 @@ export function createPane(
     uniforms: TerrainUniforms,
     material: THREE.MeshBasicNodeMaterial
 ): Pane {
-    const { uFrequency, uAmplitude, uOctaves, uLacunarity, uGain } = uniforms
+    const { uFrequency, uAmplitude, uOctaves, uLacunarity, uGain, uSunDir } = uniforms
 
     const params = {
         frequency: uFrequency.value as number,
@@ -15,6 +15,11 @@ export function createPane(
         lacunarity:uLacunarity.value as number,
         gain:      uGain.value as number,
         wireframe: false,
+        sundir: {
+            x: (uSunDir.value as THREE.Vector3).x,
+            y: (uSunDir.value as THREE.Vector3).y,
+            z: (uSunDir.value as THREE.Vector3).z,
+        }
     }
 
     const pane = new Pane({ title: 'Wave Controls' })
@@ -36,6 +41,17 @@ export function createPane(
 
     pane.addBinding(params, 'wireframe')
         .on('change', ({ value }) => { material.wireframe = value })
+
+    pane.addBinding(params, 'sundir', {
+        picker: 'inline',
+        expanded: 'true',
+        x: {min: -50, max: 50},
+        y: {min: 0, max: 80},
+        z: {min: -50, max: 50},
+    })
+    .on('change', ({value}) => {
+        (uSunDir.value as THREE.Vector3).set(value.x, value.y, value.z)
+    })
 
     return pane
 }

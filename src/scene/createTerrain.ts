@@ -33,6 +33,7 @@ export interface TerrainUniforms {
     uOctaves:   ReturnType<typeof uniform>
     uLacunarity:ReturnType<typeof uniform>
     uGain:      ReturnType<typeof uniform>
+    uSunDir:      ReturnType<typeof uniform>
 }
 
 export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms } {
@@ -43,7 +44,7 @@ export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms }
     const uOctaves      = uniform(int(5))
     const uLacunarity   = uniform(float(2.))
     const uGain         = uniform(float(.5))
-    const uSunDir       = uniform(vec3(30, 40, 20))
+    const uSunDir       = uniform(vec3(10, 10, -20))
 
     // coords of the plane I want to displace
     const xz = vec2(positionLocal.x, positionLocal.z)
@@ -55,11 +56,44 @@ export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms }
         return noiseHeight
     })
 
+    const shadowHeightField = Fn(({p, sunDir}: {p: any, sunDir: any}) => {
+        // sunDir: world space direction from point to sun, normalized
+        const sunXZ = vec2(sunDir.x, sunDir.z)
+        const horizontalLen = max(length(sunXZ), float(0.001))
+
+        const rayDirXZ = sunXZ.div(horizontalLen) // normalized direction in XZ plane
+        const sunSlope = sunDir.y.div(horizontalLen) // vertical rise per horizontal unit
+
+        const h0 = terrainHeight({p})
+        const shadow = float(1.0).toVar()
+
+        // march along the sun dir on the heightfield
+        const tStart = float(.15)
+        const stepLen = float(.25)
+        const steps = int(12)
+
+        Loop({ start: int(0), end: steps, type: 'int', condition: '<' }, ({ i }) => {
+            const t = tStart.add(float(i).mul(stepLen))
+            const sampleP = p.add(rayDirXZ.mul(t))
+
+            const terrainH = terrainHeight({p: sampleP})
+            const rayH = h0.add(sunSlope.mul(t))
+
+            // pos: ray above terrain, lit - neg: blocked, shadow
+            const d = rayH.sub(terrainH)
+
+            const penumbra = float(32.0).mul(d).div(t)
+            shadow.assign(min(shadow, penumbra))
+        })
+
+        return min(max(shadow, float(0.0)), float(1.0))
+    })
+
     const finalHeight = terrainHeight({p: xz})
     const displacedPosition = vec3(positionLocal.x, finalHeight, positionLocal.z)
 
     // normal calculation
-    const eps = float(0.05)
+    const eps = EPSILON
     const hC = finalHeight
     const hX = terrainHeight({p: xz.add(vec2(eps, 0.0))})
     const hZ = terrainHeight({p: xz.add(vec2(0.0, eps))})
@@ -79,13 +113,15 @@ export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms }
 
     const diffuse = dot(N, L).max(0.0)
     const specular = float(0.0) //dot(N, H).max(0.0).pow(float(32.0))
+    //const sh = shadowHeightField({p: xz, sunDir: lightDirWorld})
 
-    const baseColor = color('#462f1c')
+    const baseColor = color('#644427')
     const uAmbient = float(0.1)
     const uDiffuse = float(1.0)
     const uSpecular = float(.0)
 
-    const litColor = baseColor.mul(uAmbient.add(diffuse.mul(uDiffuse)))
+    const litColor = baseColor
+        .mul(uAmbient.add(diffuse.mul(uDiffuse)))
         .add(vec3(specular.mul(uSpecular)))
 
 
@@ -101,5 +137,5 @@ export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms }
     geometry.rotateX(-Math.PI / 2)
 
     const mesh = new THREE.Mesh(geometry, material)
-    return { mesh, uniforms: { uFrequency, uAmplitude, uOctaves, uLacunarity, uGain } }
+    return { mesh, uniforms: { uFrequency, uAmplitude, uOctaves, uLacunarity, uGain, uSunDir } }
 }

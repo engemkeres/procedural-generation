@@ -4,6 +4,14 @@ import { PointerLockControls } from 'three/examples/jsm/Addons.js'
 import { FlyControls } from 'three/examples/jsm/Addons.js'
 import { createTerrain } from './createTerrain'
 import { createPane } from './createPane'
+import {
+    positionWorldDirection,
+    color,
+    mix,
+    smoothstep,
+    float,
+    max
+} from 'three/tsl'
 
 export function initScene(canvas: HTMLCanvasElement): () => void {
     const timer = new THREE.Timer()
@@ -16,19 +24,33 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
     const scene = new THREE.Scene()
+
+    const horizon = color('#b8d7ff')
+    const zenith = color('#3f5f9a')
+    const groundTint = color('#d9c7b0')
+
+    const dirY = positionWorldDirection.y
+    const skyT = smoothstep(float(0.0), float(0.9), max(dirY, float(0.0)))
+    const groundT = smoothstep(float(-0.9), float(0.0), dirY)
+
+    const skyColor = mix(horizon, zenith, skyT)
+    const fullBg = mix(groundTint, skyColor, groundT)
+
+    scene.backgroundNode = fullBg
+
     const sun = new THREE.DirectionalLight(0xFFFFFF, 2.00)
     sun.position.set(30, 40, 20)
-    sun.castShadow = true
-    sun.shadow.mapSize.set(2048, 2048)
-    sun.shadow.camera.left = -30
-    sun.shadow.camera.right = 30
-    sun.shadow.camera.top = 30
-    sun.shadow.camera.bottom = -30
-    sun.shadow.camera.near = 1
-    sun.shadow.camera.far = 120
+    // sun.castShadow = true
+    // sun.shadow.mapSize.set(2048, 2048)
+    // sun.shadow.camera.left = -30
+    // sun.shadow.camera.right = 30
+    // sun.shadow.camera.top = 30
+    // sun.shadow.camera.bottom = -30
+    // sun.shadow.camera.near = 1
+    // sun.shadow.camera.far = 120
 
-    sun.shadow.bias = -0.001
-    sun.shadow.normalBias = 0.05
+    // sun.shadow.bias = -0.001
+    // sun.shadow.normalBias = 0.05
 
     scene.add(sun)
     scene.add(new THREE.AmbientLight(0x8899aa, 0.25))
@@ -61,8 +83,8 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
     canvas.addEventListener('wheel', onWheel)
 
     const { mesh, uniforms } = createTerrain()
-    mesh.castShadow = true
-    mesh.receiveShadow = true
+    // mesh.castShadow = true
+    // mesh.receiveShadow = true
     scene.add(mesh)
 
     const pane = createPane(uniforms, mesh.material as THREE.MeshBasicNodeMaterial)
