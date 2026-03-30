@@ -1,9 +1,8 @@
 import * as THREE from 'three/webgpu'
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { PointerLockControls } from 'three/examples/jsm/Addons.js'
-import { FlyControls } from 'three/examples/jsm/Addons.js'
-import { createTerrain } from './createTerrain'
+import { createTerrain, createTerrainUniforms } from './createTerrain'
 import { createPane } from './createPane'
+import { createHeightCompute } from './createHeightCompute'
 import {
     positionWorldDirection,
     color,
@@ -39,18 +38,7 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
     scene.backgroundNode = fullBg
 
     const sun = new THREE.DirectionalLight(0xFFFFFF, 2.00)
-    sun.position.set(30, 40, 20)
-    // sun.castShadow = true
-    // sun.shadow.mapSize.set(2048, 2048)
-    // sun.shadow.camera.left = -30
-    // sun.shadow.camera.right = 30
-    // sun.shadow.camera.top = 30
-    // sun.shadow.camera.bottom = -30
-    // sun.shadow.camera.near = 1
-    // sun.shadow.camera.far = 120
-
-    // sun.shadow.bias = -0.001
-    // sun.shadow.normalBias = 0.05
+    sun.position.set(8, 8, -12)
 
     scene.add(sun)
     scene.add(new THREE.AmbientLight(0x8899aa, 0.25))
@@ -82,12 +70,32 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
 
     canvas.addEventListener('wheel', onWheel)
 
-    const { mesh, uniforms } = createTerrain()
-    // mesh.castShadow = true
-    // mesh.receiveShadow = true
+    const uniforms = createTerrainUniforms()
+    const heightCompute = createHeightCompute(renderer, uniforms)
+
+    const { mesh } = createTerrain({
+        uniforms,
+        heightTexture: heightCompute.heightTexture,
+        heightResolution: heightCompute.resolution
+    })
     scene.add(mesh)
 
-    const pane = createPane(uniforms, mesh.material as THREE.MeshBasicNodeMaterial)
+    let terrainRebuildTimeout: number | undefined
+
+    const requestTerrainRebuild = () => {
+        if (terrainRebuildTimeout !== undefined) {
+            window.clearTimeout(terrainRebuildTimeout)
+        }
+
+        terrainRebuildTimeout = window.setTimeout(() => {
+            heightCompute.markDirty()
+            terrainRebuildTimeout = undefined
+        }, 150)
+    }
+
+    const pane = createPane(uniforms, mesh.material as THREE.MeshBasicNodeMaterial, {
+        onTerrainParamsChange: requestTerrainRebuild
+    })
 
     const onResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight
@@ -98,6 +106,8 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
 
 
     renderer.setAnimationLoop(() => {
+        heightCompute.runIfDirty()
+
         timer.update()
         const delta = timer.getDelta()
         const speed = 4 * delta
@@ -121,8 +131,14 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
         window.removeEventListener('keydown', onKeyDown)
         window.removeEventListener('keyup', onKeyUp)
         canvas.removeEventListener('wheel', onWheel)
+
+        if (terrainRebuildTimeout !== undefined) {
+            window.clearTimeout(terrainRebuildTimeout)
+        }
+
         controls.dispose()
         pane.dispose()
+        heightCompute.dispose()
         renderer.dispose()
     }
 }

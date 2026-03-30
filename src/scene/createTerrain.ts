@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu'
-import {noise2D, fbm, myRandom} from './tslHelpers'
+import {noise2D, fbm, myRandom, shapeTerrainMode} from './tslHelpers'
 import {
     uniform,
     int, float, vec2, vec3, vec4, mat2, mat3, mat4,
@@ -22,98 +22,117 @@ import {
     If, Loop,
     rand,
     array,
-    EPSILON,
-    transformNormalToView, transformDirection,
-    normalView, positionView, cameraViewMatrix
+    transformDirection,
+    modelWorldMatrix,
+    texture
 } from 'three/tsl'
 
+export const TERRAIN_SIZE = 30
+export const TERRAIN_SEGMENTS = 1024
+export const TERRAIN_RESOLUTION = TERRAIN_SEGMENTS + 1
+export const TERRAIN_WORLD_STEP = TERRAIN_SIZE / TERRAIN_SEGMENTS
+
 export interface TerrainUniforms {
-    uFrequency: ReturnType<typeof uniform>
-    uAmplitude: ReturnType<typeof uniform>
-    uOctaves:   ReturnType<typeof uniform>
-    uLacunarity:ReturnType<typeof uniform>
-    uGain:      ReturnType<typeof uniform>
-    uSunDir:      ReturnType<typeof uniform>
+    uFrequency: any
+    uAmplitude: any
+    uOctaves: any
+    uLacunarity: any
+    uGain: any
+    uTerrainMode: any
+    uSunDir: any
 }
 
-export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms } {
+interface CreateTerrainOptions {
+    uniforms?: TerrainUniforms
+    heightTexture?: THREE.Texture
+    heightResolution?: number
+}
 
-    // uniforms
-    const uFrequency    = uniform(float(.5))
-    const uAmplitude    = uniform(float(2.))
-    const uOctaves      = uniform(int(5))
-    const uLacunarity   = uniform(float(2.))
-    const uGain         = uniform(float(.5))
-    const uSunDir       = uniform(vec3(10, 10, -20))
+export function createTerrainUniforms(): TerrainUniforms {
+    return {
+        uFrequency: uniform(float(.5)),
+        uAmplitude: uniform(float(2.)),
+        uOctaves: uniform(int(5)),
+        uLacunarity: uniform(float(2.)),
+        uGain: uniform(float(.5)),
+        uTerrainMode: uniform(int(0)),
+        uSunDir: uniform(vec3(8, 8, -12))
+    }
+}
+
+export function createTerrain(options: CreateTerrainOptions = {}): { mesh: THREE.Mesh; uniforms: TerrainUniforms } {
+
+    const uniforms = options.uniforms ?? createTerrainUniforms()
+    const { uFrequency, uAmplitude, uOctaves, uLacunarity, uGain, uTerrainMode, uSunDir } = uniforms
+
+    const hasHeightTexture = options.heightTexture !== undefined
+    const heightTexture = options.heightTexture
+    const heightResolution = options.heightResolution ?? TERRAIN_RESOLUTION
 
     // coords of the plane I want to displace
     const xz = vec2(positionLocal.x, positionLocal.z)
+    const terrainUV = uv()
+    const worldStep = float(TERRAIN_WORLD_STEP)
+    const texelStep = float(1.0 / Math.max(heightResolution - 1, 1))
 
     const terrainHeight = Fn(({p}: {p: any }) => {
-        const h: any = fbm({st: p, uFrequency, uOctaves, uLacunarity, uGain})
-        const noiseHeight = h.mul(uAmplitude)
+        const rawHeight: any = fbm({st: p, uFrequency, uOctaves, uLacunarity, uGain})
+        const shapedHeight: any = shapeTerrainMode({ value: rawHeight, mode: uTerrainMode })
+        const noiseHeight = shapedHeight.mul(uAmplitude)
 
         return noiseHeight
     })
 
-    const shadowHeightField = Fn(({p, sunDir}: {p: any, sunDir: any}) => {
-        // sunDir: world space direction from point to sun, normalized
-        const sunXZ = vec2(sunDir.x, sunDir.z)
-        const horizontalLen = max(length(sunXZ), float(0.001))
 
-        const rayDirXZ = sunXZ.div(horizontalLen) // normalized direction in XZ plane
-        const sunSlope = sunDir.y.div(horizontalLen) // vertical rise per horizontal unit
-
-        const h0 = terrainHeight({p})
-        const shadow = float(1.0).toVar()
-
-        // march along the sun dir on the heightfield
-        const tStart = float(.15)
-        const stepLen = float(.25)
-        const steps = int(12)
-
-        Loop({ start: int(0), end: steps, type: 'int', condition: '<' }, ({ i }) => {
-            const t = tStart.add(float(i).mul(stepLen))
-            const sampleP = p.add(rayDirXZ.mul(t))
-
-            const terrainH = terrainHeight({p: sampleP})
-            const rayH = h0.add(sunSlope.mul(t))
-
-            // pos: ray above terrain, lit - neg: blocked, shadow
-            const d = rayH.sub(terrainH)
-
-            const penumbra = float(32.0).mul(d).div(t)
-            shadow.assign(min(shadow, penumbra))
+    const sampleHeight = hasHeightTexture && heightTexture
+        ? Fn(({p}: {p: any}) => {
+            const clampedUV = min(max(p, vec2(0.0, 0.0)), vec2(1.0, 1.0))
+            return texture(heightTexture, clampedUV).r
         })
+        : Fn(({p}: {p: any}) => terrainHeight({p}))
 
-        return min(max(shadow, float(0.0)), float(1.0))
-    })
+    let finalHeight: any
+    let terrainNormal: any
 
-    const finalHeight = terrainHeight({p: xz})
+    if (hasHeightTexture) {
+        finalHeight = sampleHeight({p: terrainUV})
+
+        const hXp = sampleHeight({p: terrainUV.add(vec2(texelStep, 0.0))})
+        const hXm = sampleHeight({p: terrainUV.sub(vec2(texelStep, 0.0))})
+        const hZp = sampleHeight({p: terrainUV.add(vec2(0.0, texelStep))})
+        const hZm = sampleHeight({p: terrainUV.sub(vec2(0.0, texelStep))})
+
+        const pXp = vec3(positionLocal.x.add(worldStep), hXp, positionLocal.z)
+        const pXm = vec3(positionLocal.x.sub(worldStep), hXm, positionLocal.z)
+        const pZp = vec3(positionLocal.x, hZp, positionLocal.z.add(worldStep))
+        const pZm = vec3(positionLocal.x, hZm, positionLocal.z.sub(worldStep))
+
+        terrainNormal = normalize(cross(pZp.sub(pZm), pXp.sub(pXm)))
+    } else {
+        finalHeight = sampleHeight({p: xz})
+
+        const hXp = sampleHeight({p: xz.add(vec2(worldStep, 0.0))})
+        const hXm = sampleHeight({p: xz.sub(vec2(worldStep, 0.0))})
+        const hZp = sampleHeight({p: xz.add(vec2(0.0, worldStep))})
+        const hZm = sampleHeight({p: xz.sub(vec2(0.0, worldStep))})
+
+        const pXp = vec3(positionLocal.x.add(worldStep), hXp, positionLocal.z)
+        const pXm = vec3(positionLocal.x.sub(worldStep), hXm, positionLocal.z)
+        const pZp = vec3(positionLocal.x, hZp, positionLocal.z.add(worldStep))
+        const pZm = vec3(positionLocal.x, hZm, positionLocal.z.sub(worldStep))
+
+        terrainNormal = normalize(cross(pZp.sub(pZm), pXp.sub(pXm)))
+    }
+
     const displacedPosition = vec3(positionLocal.x, finalHeight, positionLocal.z)
 
-    // normal calculation
-    const eps = EPSILON
-    const hC = finalHeight
-    const hX = terrainHeight({p: xz.add(vec2(eps, 0.0))})
-    const hZ = terrainHeight({p: xz.add(vec2(0.0, eps))})
-
-    const pC = vec3(positionLocal.x, hC, positionLocal.z)
-    const pX = vec3(positionLocal.x.add(eps), hX, positionLocal.z)
-    const pZ = vec3(positionLocal.x, hZ, positionLocal.z.add(eps))
-
-    const terrainNormal = normalize(cross(pZ.sub(pC), pX.sub(pC)))
-
-    // blinn-phong
-    const lightDirWorld = normalize(uSunDir)
-    const N = transformNormalToView(terrainNormal).normalize()
-    const L = transformNormalToView(lightDirWorld).normalize()
-    const V = positionView.negate().normalize()
-    const H = L.add(V).normalize()
+    // lambert diffuse in world space keeps lighting camera-invariant
+    const lightDirWorld = vec3(uSunDir).normalize()
+    const N = transformDirection(terrainNormal, modelWorldMatrix).normalize()
+    const L = lightDirWorld
 
     const diffuse = dot(N, L).max(0.0)
-    const specular = float(0.0) //dot(N, H).max(0.0).pow(float(32.0))
-    //const sh = shadowHeightField({p: xz, sunDir: lightDirWorld})
+    const specular = float(0.0)
 
     const baseColor = color('#644427')
     const uAmbient = float(0.1)
@@ -128,14 +147,13 @@ export function createTerrain(): { mesh: THREE.Mesh; uniforms: TerrainUniforms }
     // material
     const material = new THREE.MeshBasicNodeMaterial({ wireframe: false})
     material.positionNode = displacedPosition
-    // material.normalNode   = transformNormalToView(terrainNormal)
     material.colorNode    = litColor
     material.side         = THREE.DoubleSide
 
     // plane in the right orientation
-    const geometry = new THREE.PlaneGeometry(30, 30, 512, 512)
+    const geometry = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS)
     geometry.rotateX(-Math.PI / 2)
 
     const mesh = new THREE.Mesh(geometry, material)
-    return { mesh, uniforms: { uFrequency, uAmplitude, uOctaves, uLacunarity, uGain, uSunDir } }
+    return { mesh, uniforms }
 }

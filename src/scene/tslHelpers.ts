@@ -185,12 +185,13 @@ import {
         const f = fract(st)
 
         // four corners of tile
-        const a = myRandom({st: i})
+        const a = myRandom({st: i.add(vec2(0.0, 0.0))})
         const b = myRandom({st: i.add(vec2(1.0, 0.0))})
         const c = myRandom({st: i.add(vec2(0.0, 1.0))})
         const d = myRandom({st: i.add(vec2(1.0, 1.0))})
 
-        const u: any = f.mul(f).mul(f.mul(2.).negate().add(3.))
+        // quintic instead of cubic smoothstep
+        const u: any = f.mul(f).mul(f).mul(f.mul(f.mul(6.0).sub(15.0)).add(10.0))
 
         return mix(a, b, u.x).add(
                 c.sub(a).mul(u.y).mul(float(1.0).sub(u.x)).add(
@@ -202,19 +203,28 @@ import {
         const i = floor(st)
         const f = fract(st)
 
-        const u: any = f.mul(f).mul(f.mul(2.).negate().add(3.))
+        const u: any = f.mul(f).mul(f).mul(f.mul(f.mul(6.0).sub(15.0)).add(10.0))
 
-        const a: any = myRandom2({st: i})
-        const b: any = myRandom2({st: i.add(vec2(1.0, 0.0))})
-        const c: any = myRandom2({st: i.add(vec2(0.0, 1.0))})
-        const d: any = myRandom2({st: i.add(vec2(1.0, 1.0))})
+        // hash to pseudo-random unit gradients in [-1, 1]^2.
+        const aRaw: any = myRandom2({st: i.add(vec2(0.0, 0.0))}).mul(2.0).sub(1.0)
+        const bRaw: any = myRandom2({st: i.add(vec2(1.0, 0.0))}).mul(2.0).sub(1.0)
+        const cRaw: any = myRandom2({st: i.add(vec2(0.0, 1.0))}).mul(2.0).sub(1.0)
+        const dRaw: any = myRandom2({st: i.add(vec2(1.0, 1.0))}).mul(2.0).sub(1.0)
 
-        return mix(
+        const a: any = aRaw.div(max(length(aRaw), float(0.0001)))
+        const b: any = bRaw.div(max(length(bRaw), float(0.0001)))
+        const c: any = cRaw.div(max(length(cRaw), float(0.0001)))
+        const d: any = dRaw.div(max(length(dRaw), float(0.0001)))
+
+        const n = mix(
             mix( dot( a, f.sub(vec2(0.0, 0.0))),
                  dot( b, f.sub(vec2(1.0, 0.0))), u.x),
             mix( dot( c, f.sub(vec2(0.0, 1.0))),
                  dot( d, f.sub(vec2(1.0, 1.0))), u.x), u.y
         )
+
+        // keep output in [0,1]
+        return n.mul(0.5).add(0.5)
     })
 
     export const lines = Fn(({pos, b}: {pos: any, b: any}) => {
@@ -338,14 +348,41 @@ import {
         const gain = uGain.toVar()
         const stVar: any = vec2(st).toVar()
 
+        // rotate and shift to avoid aligned peak values
+        const octaveRotation = (mat2 as any)(
+            0.80, -0.60,
+            0.60, 0.80
+        )
+        const octaveShift = vec2(19.1, 33.4)
+
         Loop(
             {start: int(0), end: uOctaves, type:'int', condition: '<'},
             ({i}) => {
-                value.addAssign(amplitude.mul(noise2D({st: stVar.mul(frequency)})))
+                const octaveSt = stVar.mul(frequency)
+
+                // re-center to [-0.5, 0.5] so more detail does not only go upward
+                const n = gradientNoise({st: octaveSt}).sub(0.5)
+                value.addAssign(amplitude.mul(n))
+
                 frequency.mulAssign(lacunarity)
                 amplitude.mulAssign(gain)
+
+                stVar.assign(octaveRotation.mul(stVar).add(octaveShift))
             }
         )
 
-        return value
+        // bring result back near [0,1]
+        return value.add(0.5)
+    })
+
+    export const shapeTerrainMode = Fn(({ value, mode }: { value: any, mode: any }) => {
+        const centered = value.mul(2.0).sub(1.0)
+        const billowy = abs(centered)
+        const ridged = float(1.0).sub(abs(centered))
+
+        return select(
+            equal(mode, int(1)),
+            billowy,
+            select(equal(mode, int(2)), ridged, value)
+        )
     })
