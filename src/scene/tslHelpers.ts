@@ -339,8 +339,8 @@ import {
 
     // moved the amplitude out, so the value stays between 0-1 with .5 gain
     // (.5 + .25 + .125 + ... = 1 approx.) can be used as coloring
-    export const fbm = Fn(({st, uFrequency, uOctaves, uLacunarity, uGain}:
-        {st: any, uOctaves: any, uFrequency: any, uLacunarity: any, uGain: any}) => {
+    export const fbm = Fn(({st, uFrequency, uOctaves, uLacunarity, uGain, uTerrainMode}:
+        {st: any, uOctaves: any, uFrequency: any, uLacunarity: any, uGain: any, uTerrainMode: any}) => {
         const value = float(0.).toVar()
         const amplitude = float(.5).toVar()
         const frequency = uFrequency.toVar()
@@ -360,9 +360,18 @@ import {
             ({i}) => {
                 const octaveSt = stVar.mul(frequency)
 
-                // re-center to [-0.5, 0.5] so more detail does not only go upward
-                const n = gradientNoise({st: octaveSt}).sub(0.5)
-                value.addAssign(amplitude.mul(n))
+                // keep each octave in a centered [-0.5, 0.5] range across all terrain modes
+                const nSimple = gradientNoise({st: octaveSt}).sub(0.5)
+                const nBillowy = abs(nSimple.mul(2.0)).sub(0.5)
+                const nRidged = float(1.0).sub(abs(nSimple.mul(2.0))).sub(0.5)
+
+                const nShaped = select(
+                    equal(uTerrainMode, int(1)),
+                    nBillowy,
+                    select(equal(uTerrainMode, int(2)), nRidged, nSimple)
+                )
+
+                value.addAssign(amplitude.mul(nShaped))
 
                 frequency.mulAssign(lacunarity)
                 amplitude.mulAssign(gain)
@@ -373,16 +382,4 @@ import {
 
         // bring result back near [0,1]
         return value.add(0.5)
-    })
-
-    export const shapeTerrainMode = Fn(({ value, mode }: { value: any, mode: any }) => {
-        const centered = value.mul(2.0).sub(1.0)
-        const billowy = abs(centered)
-        const ridged = float(1.0).sub(abs(centered))
-
-        return select(
-            equal(mode, int(1)),
-            billowy,
-            select(equal(mode, int(2)), ridged, value)
-        )
     })

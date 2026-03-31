@@ -9,7 +9,7 @@ import {
     vec4
 } from 'three/tsl'
 
-import { fbm, shapeTerrainMode } from './tslHelpers'
+import { fbm } from './tslHelpers'
 import {
     TERRAIN_RESOLUTION,
     TERRAIN_SIZE,
@@ -53,20 +53,14 @@ export function createHeightCompute(
         // map uv to world space
         const worldXZ = uvCoord.mul(float(TERRAIN_SIZE)).sub(float(TERRAIN_HALF_SIZE))
 
-        const rawHeight = fbm({
+        const height = fbm({
             st: worldXZ,
             uFrequency: uniforms.uFrequency,
             uOctaves: uniforms.uOctaves,
             uLacunarity: uniforms.uLacunarity,
-            uGain: uniforms.uGain
-        })
-
-        const shapedHeight = shapeTerrainMode({
-            value: rawHeight,
-            mode: uniforms.uTerrainMode
-        })
-
-        const height = shapedHeight.mul(uniforms.uAmplitude)
+            uGain: uniforms.uGain,
+            uTerrainMode: uniforms.uTerrainMode
+        }).mul(uniforms.uAmplitude)
 
         textureStore(storageTexture, indexUV, vec4(height, 0.0, 0.0, 1.0)).toWriteOnly()
     })

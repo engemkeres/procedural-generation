@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu'
-import {noise2D, fbm, myRandom, shapeTerrainMode} from './tslHelpers'
+import {noise2D, fbm, myRandom} from './tslHelpers'
 import {
     uniform,
     int, float, vec2, vec3, vec4, mat2, mat3, mat4,
@@ -76,9 +76,14 @@ export function createTerrain(options: CreateTerrainOptions = {}): { mesh: THREE
     const texelStep = float(1.0 / Math.max(heightResolution - 1, 1))
 
     const terrainHeight = Fn(({p}: {p: any }) => {
-        const rawHeight: any = fbm({st: p, uFrequency, uOctaves, uLacunarity, uGain})
-        const shapedHeight: any = shapeTerrainMode({ value: rawHeight, mode: uTerrainMode })
-        const noiseHeight = shapedHeight.mul(uAmplitude)
+        const noiseHeight = fbm({
+            st: p,
+            uFrequency,
+            uOctaves,
+            uLacunarity,
+            uGain,
+            uTerrainMode
+        }).mul(uAmplitude)
 
         return noiseHeight
     })
