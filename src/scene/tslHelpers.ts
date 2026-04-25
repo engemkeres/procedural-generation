@@ -361,9 +361,9 @@ import {
                 const octaveSt = stVar.mul(frequency)
 
                 // keep each octave in a centered [-0.5, 0.5] range across all terrain modes
-                const nSimple = gradientNoise({st: octaveSt}).sub(0.5)
-                const nBillowy = abs(nSimple.mul(2.0)).sub(0.5)
-                const nRidged = float(1.0).sub(abs(nSimple.mul(2.0))).sub(0.5)
+                const nSimple = gradientNoise({st: octaveSt})
+                const nBillowy = abs(nSimple.mul(2.0).sub(1.0))
+                const nRidged = float(1.0).sub(abs(nSimple.mul(2.0).sub(1.0)))
 
                 const nShaped = select(
                     equal(uTerrainMode, int(1)),
@@ -381,5 +381,5 @@ import {
         )
 
         // bring result back near [0,1]
-        return value.add(0.5)
+        return value
     })
