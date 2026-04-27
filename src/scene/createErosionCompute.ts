@@ -279,7 +279,49 @@ export function createErosionCompute(
             .add(select(isBottomEdge, float(1.0), float(0.0)))
             .add(select(isTopEdge, float(1.0), float(0.0)))
         
-        //
+        // min caps corners to one, flip it so 1 is interior and 0 is edge
         const keepMask = float(1.0).sub(min(float(1.0), boundaryMask))
+
+        // rename to waterCurrent?
+        const dCurrent = texture(waterIn, uvCoord).r
+
+        // same constant rain everywhere r*Δt
+        const rainAdd = erosionUniforms.uRainRate.mul(erosionUniforms.uDt)
+
+        // change here, removed source stuff and minwater parameter
+        const dAfterRain = dCurrent.add(rainAdd).mul(keepMask)
+
+        // TODO: keep vec4 for these or change it to scalar?
+        // boundaries act as open drains, so water does not pile up
+        textureStore(waterOut, indexUV, vec4(dAfterRain, 0.0, 0.0, 1.0)).toWriteOnly()
+    })
+
+    // each cell has 4 virtual pipes, same with the neighbors.
+    // water outflow flux is updated with the pressure diff between connected cells.
+    // fL(t+Δt) = max(0, fL(t,x,y) + Δt*A*g*ΔhL(x,y)/l )
+    // ΔhL(x,y) is the height diff between left and current cell
+    // ΔhL(x,y) = bt(x,y) + d1(x,y) - bt(x-1, y) - d1(x-1,y)
+    // where bt is current terrain height, and d1 is the intermediate water height
+    const computeFlux = Fn(({
+        bedIn,
+        waterIn,
+        fluxIn,
+        fluxOut
+    }: {
+        bedIn: any
+        waterIn: any
+        fluxIn: any
+        fluxOut: any
+    }) => {
+        const posX = instanceIndex.mod(resolution)
+        const posY = instanceIndex.div(resolution)
+        const indexUV = uvec2(posX, posY)
+
+        const uvCoord = vec2(
+            float(posX).div(float(resMinusOne)),
+            float(posY).div(float(resMinusOne))
+        )
+
+        
     })
 }
