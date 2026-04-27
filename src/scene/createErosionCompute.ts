@@ -450,5 +450,79 @@ export function createErosionCompute(
             float(posX).div(float(resMinusOne)),
             float(posY).div(float(resMinusOne))
         )
+
+        // i should maybe store this once, this is the third time using these?
+        const isLeftEdge = equal(posX, int(0))
+        const isRightEdge = equal(posX, int(resolution - 1))
+        const isBottomEdge = equal(posY, int(0))
+        const isTopEdge = equal(posY, int(resolution - 1))
+
+        const boundaryMask = select(isLeftEdge, float(1.0), float(0.0))
+            .add(select(isRightEdge, float(1.0), float(0.0)))
+            .add(select(isBottomEdge, float(1.0), float(0.0)))
+            .add(select(isTopEdge, float(1.0), float(0.0)))
+        const keepMask = float(1.0).sub(min(float(1.0), boundaryMask))
+
+        // ez is vótmá, TODO: kiszedni az elejére
+        const uvL = min(
+            max(
+                uvCoord.sub(vec2(texelStepNode, 0.0)),
+                vec2(0.0, 0.0)
+            ),
+            vec2(1.0, 1.0)
+        )
+
+        const uvR = min(
+            max(
+                uvCoord.add(vec2(texelStepNode, 0.0)),
+                vec2(0.0, 0.0)
+            ),
+            vec2(1.0, 1.0)
+        )
+
+        const uvT = min(
+            max(
+                uvCoord.add(vec2(0.0, texelStepNode)),
+                vec2(0.0, 0.0)
+            ),
+            vec2(1.0, 1.0)
+        )
+
+        const uvB = min(
+            max(
+                uvCoord.sub(vec2(0.0, texelStepNode)),
+                vec2(0.0, 0.0)
+            ),
+            vec2(1.0, 1.0)
+        )
+
+        // fluxIn, as flux that is input for the function
+        // not necessarily inward flux
+        const flow = texture(fluxIn, uvCoord)
+        const fL = flow.r
+        const fR = flow.g
+        const fT = flow.b
+        const fB = flow.a
+
+        // my left is their right and so on
+        const inFromL = select(isLeftEdge, float(0.0), texture(fluxIn, uvL).g)
+        const inFromR = select(isRightEdge, float(0.0), texture(fluxIn, uvR).r)
+        const inFromT = select(isTopEdge, float(0.0), texture(fluxIn, uvT).a)
+        const inFromB = select(isBottomEdge, float(0.0), texture(fluxIn, uvB).b)
+
+        // calculate the ΔV water height changes with
+        // sum fout and fin flow values in each (x,y) cell
+        // ΔV(x,y) = Δt*(Σfin-Σfout)
+        // ΔV(x,y) = ( fR(x-1,y) + fL(x+1,y) + fT(x, y-1) + fB(x, y+1) )*Δt - Σfout
+        // Σfout was calculated in computeFlux step
+
+        const sumOut = fL.add(fR).add(fT).add(fB)
+        const sumIn = inFromL.add(inFromR).add(inFromT).add(inFromB)
+
+        const dCurrent = texture(waterIn, uvCoord).r
+        const dUpdated = dCurrent.add(erosionUniforms.uDt.mul(sumIn.sub(sumOut)).div(cellAreaNode))
+
+        // calculate velocity using the outflow flux
+        // 
     })
 }
