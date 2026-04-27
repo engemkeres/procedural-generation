@@ -123,7 +123,7 @@ export function createErosionCompute(
     resolution = TERRAIN_RESOLUTION 
 ): ErosionComputeResources {
     const texelStep = 1 / Math.max(resolution - 1, 1)
-    const texelStepNode = float(texelStep) // simple var to node
+    const texelStepNode = float(texelStep) // simple var to node // rename later to cell-something?
     const cellAreaNode = float(TERRAIN_WORLD_STEP * TERRAIN_WORLD_STEP) // world step is just literally that, the square size
     const cellStep2Node = float (2 * TERRAIN_WORLD_STEP) // why exactly is this needed?
     const resMinusOne = Math.max(resolution - 1, 1)
@@ -322,6 +322,133 @@ export function createErosionCompute(
             float(posY).div(float(resMinusOne))
         )
 
+        // get the uv coord of the neighboring cells
+        // uvCoord is the current, texelStepNode is one sideway step
+        // min, max is to prevent sampling outside the texture
+        const uvL = min(
+            max(
+                uvCoord.sub(vec2(texelStepNode, 0.0)),
+                vec2(0.0, 0.0)
+            ),
+            vec2(1.0, 1.0)
+        )
+
+        const uvR = min(
+            max(
+                uvCoord.add(vec2(texelStepNode, 0.0)),
+                vec2(0.0, 0.0)
+            ),
+            vec2(1.0, 1.0)
+        )
+
+        const uvT = min(
+            max(
+                uvCoord.add(vec2(0.0, texelStepNode)),
+                vec2(0.0, 0.0)
+            ),
+            vec2(1.0, 1.0)
+        )
+
+        const uvB = min(
+            max(
+                uvCoord.sub(vec2(0.0, texelStepNode)),
+                vec2(0.0, 0.0)
+            ),
+            vec2(1.0, 1.0)
+        )
         
+        const b = texture(bedIn, uvCoord).r
+        const d = texture(waterIn, uvCoord).r
+        const h = b.add(d) // the water in of this has to be after the rain!
+
+        // the neighbor heights
+        const hL = texture(bedIn, uvL).r.add(texture(waterIn, uvL).r)
+        const hR = texture(bedIn, uvR).r.add(texture(waterIn, uvR).r)
+        const hT = texture(bedIn, uvT).r.add(texture(waterIn, uvT).r)
+        const hB = texture(bedIn, uvB).r.add(texture(waterIn, uvB).r)
+
+        // f as in flux, vec4 is the left-right-top-bottom
+        const fPrev = texture(fluxIn, uvCoord)
+        const dt = max(erosionUniforms.uDt, float(0.0001)) // there has to be a min
+        const l = max(erosionUniforms.uPipeLength, float(0.0001))
+        const A = erosionUniforms.uPipeArea
+        const g = erosionUniforms.uGravity
+        // fL(t+Δt) = max(0, fL(t,x,y) + Δt*A*g*ΔhL(x,y)/l )
+        const k = dt.mul(A).mul(g).div(l)
+
+        // fL(t+Δt) = max(0, fL(t,x,y) + Δt*A*g*ΔhL(x,y)/l )
+        // ΔhL(x,y) is the height diff between left and current cell
+        // middle(bed+water) - left(bed+water)
+        let fL = max(float(0.0), fPrev.r.add(k.mul(h.sub(hL))))
+        let fR = max(float(0.0), fPrev.g.add(k.mul(h.sub(hR))))
+        let fT = max(float(0.0), fPrev.b.add(k.mul(h.sub(hT))))
+        let fB = max(float(0.0), fPrev.a.add(k.mul(h.sub(hB))))
+
+        // if our cell is boundary, there should be zero flux "leaving"
+        const isLeftEdge = equal(posX, int(0))
+        const isRightEdge = equal(posX, int(resolution - 1))
+        const isBottomEdge = equal(posY, int(0))
+        const isTopEdge = equal(posY, int(resolution - 1))
+
+        const fLBounded = float(select(isLeftEdge, float(0.0), fL))
+        const fRBounded = float(select(isRightEdge, float(0.0), fR))
+        const fBBounded = float(select(isBottomEdge, float(0.0), fB))
+        const fTBounded = float(select(isTopEdge, float(0.0), fT))
+
+        // total outflow should not exceed the total amount of water in the given cell
+        // if larger, must be scaled!
+        // K = max(1, (waterlevel*x*y)/((fL+fR+fT+fB)*dt) ) scaling
+        // fi(t+Δt, x, y) = K*f(t+Δt), where i = L, R, T, B
+        const sumOut = fLBounded.add(fRBounded).add(fTBounded).add(fBBounded)
+        const maxOut = d.mul(cellAreaNode).div(dt)
+        const scale = max(float(1.0), maxOut.div(sumOut)) // TODO: this is diff then??
+        // do I really need this?
+        const flowRetention = max(float(0.0), float(1.0).sub(erosionUniforms.uFlowDamping.mul(dt)))
+
+        // same as in addWater
+        const boundaryMask = select(isLeftEdge, float(1.0), float(0.0))
+            .add(select(isRightEdge, float(1.0), float(0.0)))
+            .add(select(isBottomEdge, float(1.0), float(0.0)))
+            .add(select(isTopEdge, float(1.0), float(0.0)))
+        const keepMask = float(1.0).sub(min(float(1.0), boundaryMask))
+
+        const fLScaled = fLBounded.mul(scale).mul(keepMask)
+        const fRScaled = fRBounded.mul(scale).mul(keepMask)
+        const fTScaled = fTBounded.mul(scale).mul(keepMask)
+        const fBScaled = fBBounded.mul(scale).mul(keepMask)
+
+        textureStore(fluxOut, indexUV, vec4(fLScaled, fRScaled, fTScaled, fBScaled)).toWriteOnly()
+    })
+
+    const updateState = Fn(({
+        bedIn,
+        bedBaseIn,
+        waterIn,
+        sedimentIn,
+        fluxIn,
+        bedOut,
+        waterOut,
+        sedimentOut,
+        velocityOut
+    }: {
+        bedIn: any
+        bedBaseIn: any
+        waterIn: any
+        sedimentIn: any
+        fluxIn: any
+        bedOut: any
+        waterOut: any
+        sedimentOut: any
+        velocityOut: any
+    }) => {
+        // vótmá
+        const posX = instanceIndex.mod(resolution)
+        const posY = instanceIndex.div(resolution)
+        const indexUV = uvec2(posX, posY)
+
+        const uvCoord = vec2(
+            float(posX).div(float(resMinusOne)),
+            float(posY).div(float(resMinusOne))
+        )
     })
 }
