@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { PointerLockControls } from 'three/examples/jsm/Addons.js'
-import { createTerrain, createTerrainUniforms } from './createTerrain'
+import { createTerrain, createTerrainUniforms, TERRAIN_RESOLUTION } from './createTerrain'
 import { createPane } from './createPane'
 import { createHeightCompute } from './createHeightCompute'
 import {
