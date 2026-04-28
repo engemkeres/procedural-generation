@@ -523,6 +523,44 @@ export function createErosionCompute(
         const dUpdated = dCurrent.add(erosionUniforms.uDt.mul(sumIn.sub(sumOut)).div(cellAreaNode))
 
         // calculate velocity using the outflow flux
-        // 
+        // velocity needed for the hydraulic erosion and deposition calculation
+        // ΔWx = 0.5 * (fR(x-1,y)-fL(x,y)+fR(x,y)-fL(x+1,y))
+        // aka half of what leaves the left neighbor towards us,
+        // what leaves our cell towards the left side, same for right
+        const wx = float(0.5).mul(inFromL.sub(fL).add(fR).sub(inFromR))
+        const wz = float(0.5).mul(inFromB.sub(fB).add(fT).sub(inFromT))
+
+        // TODO: remove bed base later if not needed for a fix
+        const bCurrent = texture(bedIn, uvCoord).r
+        const bBase = texture(bedBaseIn, uvCoord).r
+
+        const bL = texture(bedIn, uvL).r
+        const bR = texture(bedIn, uvR).r
+        const bT = texture(bedIn, uvT).r
+        const bB = texture(bedIn, uvB).r
+
+        // calculate C water sediment capacity
+        // C(x,y) = Kc * sin(α(x,y))*|v(x,y)|*lmax(d1(x,y)), where:
+        //      sin(α) is the local tilt angle
+        //      v(x,y) is the fater flow vector in the cell
+        //      Kc is a global simulation parameter
+        // lmax is a limiting ramp function:
+        // lmax(x) =
+        //          0, if x <= 0
+        //          1, if x >= Kdmax
+        //          1-(Kdmax-x)/Kdmax, if 0 < x < Kdmax
+        // where Kdmax is a global simulation parameter controlling erosion depth
+        //
+        // even better with true 3D collision
+        // C(x,y) = Kc * (-N(x,y)*V) *|v(x,y)|*lmax(d1(x,y)), where:
+        //      N(x,y) is the terrain surface normal
+        //      V  is the 3D water flow vector calculated from the surface tangent
+        //      and 2D velocity vector v
+        //
+        // this modification erodes more soil if the water collides with the surface
+        // in angles closer to perpendicular.
+
+        // fuhu, lets get to calculating the parts of this...
+
     })
 }
