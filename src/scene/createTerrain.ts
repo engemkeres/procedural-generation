@@ -50,8 +50,8 @@ interface CreateTerrainOptions {
 
 export function createTerrainUniforms(): TerrainUniforms {
     return {
-        uFrequency: uniform(float(.5)),
-        uAmplitude: uniform(float(2.)),
+        uFrequency: uniform(float(.2)),
+        uAmplitude: uniform(float(6.)),
         uOctaves: uniform(int(5)),
         uLacunarity: uniform(float(2.)),
         uGain: uniform(float(.5)),
