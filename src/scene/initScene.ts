@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu'
 import { PointerLockControls } from 'three/examples/jsm/Addons.js'
 import { createTerrain, createTerrainUniforms, TERRAIN_RESOLUTION } from './createTerrain'
 import { createPane } from './createPane'
-import { createHeightCompute } from './createHeightCompute'
+import { createErosionCompute, createErosionUniforms } from './createErosionCompute'
 import {
     positionWorldDirection,
     color,
@@ -70,15 +70,29 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
 
     canvas.addEventListener('wheel', onWheel)
 
-    const uniforms = createTerrainUniforms()
-    const heightCompute = createHeightCompute(renderer, uniforms)
+    const terrainUniforms = createTerrainUniforms()
+    const erosionUniforms = createErosionUniforms()
+    const erosionResolution = Math.floor((TERRAIN_RESOLUTION - 1) * 0.75 ) + 1
+    const erosionCompute = createErosionCompute(
+        renderer,
+        terrainUniforms,
+        erosionUniforms,
+        erosionResolution
+    )
 
     const { mesh } = createTerrain({
-        uniforms,
-        heightTexture: heightCompute.heightTexture,
-        heightResolution: heightCompute.resolution
+        uniforms: terrainUniforms,
+        heightTexture: erosionCompute.bedTexture,
+        heightResolution: erosionCompute.resolution
     })
     scene.add(mesh)
+
+    let erosionResetPending = true
+    let pendingErosionIterations = 0
+    let erosionContinuous = false
+    let continuousIterationsPerFrame = 80
+
+    const MAX_ITERATIONS_PER_FRAME = 2000
 
     let terrainRebuildTimeout: number | undefined
 
@@ -88,14 +102,33 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
         }
 
         terrainRebuildTimeout = window.setTimeout(() => {
-            heightCompute.markDirty()
+            erosionResetPending = true
             terrainRebuildTimeout = undefined
         }, 150)
     }
 
-    const pane = createPane(uniforms, mesh.material as THREE.MeshBasicNodeMaterial, {
-        onTerrainParamsChange: requestTerrainRebuild
-    })
+    const pane = createPane(
+        terrainUniforms,
+        mesh.material as THREE.MeshBasicNodeMaterial,
+        {
+            onTerrainParamsChange: requestTerrainRebuild,
+            onErosionStep: (iterations) => {
+                pendingErosionIterations += Math.max(1, Math.floor(iterations))
+            },
+            onErosionReset: () => {
+                erosionResetPending = true
+                pendingErosionIterations = 0
+                erosionContinuous = false
+            },
+            onErosionContinuousChange: (enabled) => {
+                erosionContinuous = enabled
+            },
+            onErosionContinuousIterationsChange: (iterationsPerFrame) => {
+                continuousIterationsPerFrame = Math.max(1, Math.floor(iterationsPerFrame))
+            }
+        },
+        erosionUniforms
+    )
 
     const onResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight
@@ -106,7 +139,24 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
 
 
     renderer.setAnimationLoop(() => {
-        heightCompute.runIfDirty()
+        if (erosionResetPending) {
+            erosionCompute.resetFromNoise()
+            erosionResetPending = false
+        }
+
+        if (pendingErosionIterations > 0) {
+            const iterationsThisFrame = Math.min(MAX_ITERATIONS_PER_FRAME, pendingErosionIterations)
+            erosionCompute.step(iterationsThisFrame)
+            pendingErosionIterations -= iterationsThisFrame
+        }
+
+        if (erosionContinuous) {
+            const iterationsThisFrame = Math.min(
+                MAX_ITERATIONS_PER_FRAME,
+                Math.max(1, Math.floor(continuousIterationsPerFrame))
+            )
+            erosionCompute.step(iterationsThisFrame)
+        }
 
         timer.update()
         const delta = timer.getDelta()
@@ -138,7 +188,7 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
 
         controls.dispose()
         pane.dispose()
-        heightCompute.dispose()
+        erosionCompute.dispose()
         renderer.dispose()
     }
 }

@@ -3,6 +3,7 @@ import {
     Fn,
     abs,
     distance,
+    dot,
     equal,
     float,
     instanceIndex,
@@ -10,6 +11,8 @@ import {
     length,
     max,
     min,
+    normalize,
+    saturate,
     select,
     sqrt,
     texture,
@@ -17,8 +20,8 @@ import {
     uniform,
     uvec2,
     vec2,
+    vec3,
     vec4,
-    velocity
 } from 'three/tsl'
 
 import { fbm } from './tslHelpers'
@@ -33,12 +36,13 @@ const TERRAIN_HALF_SIZE = TERRAIN_SIZE * 0.5
 
 function createStorageTexture(
     name: string,
-    resolution: number
+    resolution: number,
+    useLinearFilter = false
 ): THREE.StorageTexture {
     const textureHandle = new THREE.StorageTexture(resolution, resolution)
     textureHandle.type = THREE.FloatType
-    textureHandle.minFilter = THREE.NearestFilter // when texel covers less then one pixel
-    textureHandle.magFilter = THREE.NearestFilter // when texel covers more then one pixel
+    textureHandle.minFilter = useLinearFilter ? THREE.LinearFilter : THREE.NearestFilter // when texel covers less then one pixel
+    textureHandle.magFilter = useLinearFilter ? THREE.LinearFilter : THREE.NearestFilter // when texel covers more then one pixel
     textureHandle.generateMipmaps = false
     textureHandle.name = name
     return textureHandle
@@ -52,23 +56,10 @@ export interface ErosionUniforms {
     uPipeLength: any
     uRainRate: any
     uEvaporation: any
-    uFlowDamping: any
     uSedimentCapacity: any
     uDepositionRate: any
     uErosionRate: any
-    uMinWater: any
-    uAdvection: any
-    uSourceEnabled: any
-    uSourcePos: any
-    uSourceRadius: any
-    uSourceAmount: any
     uMaxErosionDepth: any
-    uMaxBedDelta: any
-    uRainSplashRate: any
-    uThermalEnabled: any
-    uThermalRate: any
-    uTalusSlope: any
-    uTalusFade: any
 }
 
 export function createErosionUniforms(): ErosionUniforms {
@@ -79,23 +70,10 @@ export function createErosionUniforms(): ErosionUniforms {
         uPipeLength: uniform(float(TERRAIN_WORLD_STEP)), // l
         uRainRate: uniform(float(0.0006)), // constant for each cell
         uEvaporation: uniform(float(0.05)),
-        uFlowDamping: uniform(float(0.25)), //why tho?
         uSedimentCapacity: uniform(float(0.7)),
         uDepositionRate: uniform(float(0.12)),
         uErosionRate: uniform(float(0.08)),
-        uMinWater: uniform(float(0.0)),
-        uAdvection: uniform(float(0.3)),
-        uSourceEnabled: uniform(int(0)),
-        uSourcePos: uniform(vec2(0.5, 0.5)),
-        uSourceRadius: uniform(float(0.12)),
-        uSourceAmount: uniform(float(0.008)),
         uMaxErosionDepth: uniform(float(2.0)),
-        uMaxBedDelta: uniform(float(TERRAIN_WORLD_STEP * 0.25)),
-        uRainSplashRate: uniform(float(0.03)),
-        uThermalEnabled: uniform(int(0)),
-        uThermalRate: uniform(float(0.06)),
-        uTalusSlope: uniform(float(0.45)),
-        uTalusFade: uniform(float(0.25))
     }
 }
 
@@ -129,7 +107,7 @@ export function createErosionCompute(
     const resMinusOne = Math.max(resolution - 1, 1)
 
     // why do I need both of these tho?
-    const bedRenderTexture = createStorageTexture('erosion-bed-render', resolution)
+    const bedRenderTexture = createStorageTexture('erosion-bed-render', resolution, true)
     const bedBaseTexture = createStorageTexture('erosion-bed-base', resolution)
 
     const stateA: ErosionState = {
@@ -187,11 +165,11 @@ export function createErosionCompute(
         }).mul(terrainUniforms.uAmplitude)
 
         // there is a starter terrain, but no water or sediment in the beginning
-        textureStore(bedOut, indexUV, vec4(bed, 0.0, 0.0, 1.0)).toWriteOnly
-        textureStore(waterOut, indexUV, vec4(0.0, 0.0, 0.0, 1.0)).toWriteOnly
-        textureStore(sedimentOut, indexUV, vec4(0.0, 0.0, 0.0, 1.0)).toWriteOnly
+        textureStore(bedOut, indexUV, vec4(bed, 0.0, 0.0, 1.0)).toWriteOnly()
+        textureStore(waterOut, indexUV, vec4(0.0, 0.0, 0.0, 1.0)).toWriteOnly()
+        textureStore(sedimentOut, indexUV, vec4(0.0, 0.0, 0.0, 1.0)).toWriteOnly()
         // rgba is the 4 directions here
-        textureStore(fluxOut, indexUV, vec4(0.0, 0.0, 0.0, 0.0)).toWriteOnly
+        textureStore(fluxOut, indexUV, vec4(0.0, 0.0, 0.0, 0.0)).toWriteOnly()
     })
 
     // just a copy function boilerplate
@@ -401,9 +379,9 @@ export function createErosionCompute(
         // fi(t+Δt, x, y) = K*f(t+Δt), where i = L, R, T, B
         const sumOut = fLBounded.add(fRBounded).add(fTBounded).add(fBBounded)
         const maxOut = d.mul(cellAreaNode).div(dt)
-        const scale = max(float(1.0), maxOut.div(sumOut)) // TODO: this is diff then??
+        const scale = min(float(1.0), maxOut.div(sumOut)) // TODO: this is diff then??
         // do I really need this?
-        const flowRetention = max(float(0.0), float(1.0).sub(erosionUniforms.uFlowDamping.mul(dt)))
+        // const flowRetention = max(float(0.0), float(1.0).sub(erosionUniforms.uFlowDamping.mul(dt)))
 
         // same as in addWater
         const boundaryMask = select(isLeftEdge, float(1.0), float(0.0))
@@ -530,6 +508,12 @@ export function createErosionCompute(
         const wx = float(0.5).mul(inFromL.sub(fL).add(fR).sub(inFromR))
         const wz = float(0.5).mul(inFromB.sub(fB).add(fT).sub(inFromT))
 
+        // v(x,y) = ΔW(x,y)/d1(x,y)
+        const depthSafe = max(dUpdated, float(0.0001)) // rather not divide by zero
+        const vX = wx.div(depthSafe)
+        const vZ = wz.div(depthSafe)
+        const vLen = length(vec2(vX, vZ))
+
         // TODO: remove bed base later if not needed for a fix
         const bCurrent = texture(bedIn, uvCoord).r
         const bBase = texture(bedBaseIn, uvCoord).r
@@ -562,5 +546,229 @@ export function createErosionCompute(
 
         // fuhu, lets get to calculating the parts of this...
 
+        // so far I got v(x,y)
+        // got the d1 as dCurrent, or do I need d2?
+        const dhdx = bR.sub(bL).div(cellStep2Node)
+        const dhdz = bT.sub(bB).div(cellStep2Node)
+        const slope = length(vec2(dhdx, dhdz))
+
+        // sin(a) = sqrt(dhdx^2 + dhdz^2) / sqrt(1 + dhdx^2 + dhdz^2)
+        const sinAlpha = slope.div(sqrt(float(1.0).add(slope.mul(slope))))
+
+        // Kdmax is max erosion depth parameter
+        // itt ha magas a víz, akkor max 1 kapacitás - nem jó, pont fordítva kéne? 1 - valami már jó lehet.
+        const lmax = float(1.0).sub( saturate( dUpdated.div(erosionUniforms.uMaxErosionDepth)))
+
+        const N = normalize(vec3(dhdx.negate(), float(1.0), dhdz.negate()))
+        const V = normalize(vec3(vX, float(0.0), vZ)) // shallow water is mostly horizontal anyways?
+
+        const collision = max(float(0.0), N.negate().dot(V))
+        const capacity = erosionUniforms.uSedimentCapacity.mul(collision).mul(vLen).mul(lmax)
+
+        // okay so finally got capacity
+        // if transported sediment st in cell(x,y) is smaller then capacity,
+        // then dissolve some soil in water
+
+        const s = texture(sedimentIn, uvCoord).r
+        const C = capacity
+        const dt = erosionUniforms.uDt
+
+        const R = float(1.0) // model hardness as in the paper later?
+        const Ks = erosionUniforms.uErosionRate
+        const Kd = erosionUniforms.uDepositionRate
+
+        const erode = max(float(0.0), C.sub(s)).mul(Ks).mul(R).mul(dt)
+        const deposit = max(float(0.0), s.sub(C).mul(Kd).mul(R).mul(dt))
+
+        // max clamping makes sure only one of them happens, right?
+        const bUpdated = bCurrent.sub(erode).add(deposit) 
+        const sUpdated = max(float(0.0), s.add(erode).sub(deposit))
+        const d3 = max(float(0.0), dUpdated.add(erode).sub(deposit))
+
+        const backUV = min(
+        max(uvCoord.sub(vec2(vX, vZ).mul(dt).div(float(TERRAIN_SIZE))), vec2(0.0, 0.0)),
+        vec2(1.0, 1.0)
+        )
+
+        const sAdv = texture(sedimentIn, backUV).r
+        const sNext = max(float(0.0), sAdv.add(sUpdated.sub(s)))
+
+        const evap = max(float(0.0), float(1.0).sub(erosionUniforms.uEvaporation.mul(dt)))
+        const dNext = max(float(0.0), d3.mul(evap))
+
+        const bFinal = bCurrent.add(bUpdated.sub(bCurrent).mul(keepMask))
+        const dFinal = dNext.mul(keepMask)
+        const sFinal = sNext.mul(keepMask)
+        const vxFinal = vX.mul(keepMask)
+        const vzFinal = vZ.mul(keepMask)
+
+        textureStore(bedOut, indexUV, vec4(bFinal, 0.0, 0.0, 1.0)).toWriteOnly()
+        textureStore(waterOut, indexUV, vec4(dFinal, 0.0, 0.0, 1.0)).toWriteOnly()
+        textureStore(sedimentOut, indexUV, vec4(sFinal, 0.0, 0.0, 1.0)).toWriteOnly()
+        textureStore(velocityOut, indexUV, vec4(vxFinal, vzFinal, 0.0, 1.0)).toWriteOnly()
     })
+
+    const initNodeA: any = initializeState({
+        bedOut: stateA.bed,
+        waterOut: stateA.water,
+        sedimentOut: stateA.sediment,
+        fluxOut: stateA.flux
+    }).compute(resolution * resolution)
+
+    const copyBedAToBase: any = copyBedToBase({
+        bedIn: stateA.bed,
+        bedBaseOut: bedBaseTexture
+    }).compute(resolution * resolution)
+
+    const initVelocityA: any = clearVelocity({
+        velocityOut: stateA.velocity
+    }).compute(resolution * resolution)
+
+    const initNodeB: any = initializeState({
+        bedOut: stateB.bed,
+        waterOut: stateB.water,
+        sedimentOut: stateB.sediment,
+        fluxOut: stateB.flux
+    }).compute(resolution * resolution)
+
+    const initVelocityB: any = clearVelocity({
+        velocityOut: stateB.velocity
+    }).compute(resolution * resolution)
+
+    const copyBedAToRender: any = copyBedToRender({
+        bedIn: stateA.bed,
+        bedRenderOut: bedRenderTexture
+    }).compute(resolution * resolution)
+
+    const copyBedBToRender: any = copyBedToRender({
+        bedIn: stateB.bed,
+        bedRenderOut: bedRenderTexture
+    }).compute(resolution * resolution)
+
+    const rainAToScratch: any = addWater({
+        waterIn: stateA.water,
+        waterOut: waterScratch
+    }).compute(resolution * resolution)
+
+    const rainBToScratch: any = addWater({
+        waterIn: stateB.water,
+        waterOut: waterScratch
+    }).compute(resolution * resolution)
+
+    const fluxAToB: any = computeFlux({
+        bedIn: stateA.bed,
+        waterIn: waterScratch,
+        fluxIn: stateA.flux,
+        fluxOut: stateB.flux
+    }).compute(resolution * resolution)
+
+    const fluxBToA: any = computeFlux({
+        bedIn: stateB.bed,
+        waterIn: waterScratch,
+        fluxIn: stateB.flux,
+        fluxOut: stateA.flux
+    }).compute(resolution * resolution)
+
+    const stateAToB: any = updateState({
+        bedIn: stateA.bed,
+        bedBaseIn: bedBaseTexture,
+        waterIn: waterScratch,
+        sedimentIn: stateA.sediment,
+        fluxIn: stateB.flux,
+        bedOut: stateB.bed,
+        waterOut: stateB.water,
+        sedimentOut: stateB.sediment,
+        velocityOut: stateB.velocity
+    }).compute(resolution * resolution)
+
+    const stateBToA: any = updateState({
+        bedIn: stateB.bed,
+        bedBaseIn: bedBaseTexture,
+        waterIn: waterScratch,
+        sedimentIn: stateB.sediment,
+        fluxIn: stateA.flux,
+        bedOut: stateA.bed,
+        waterOut: stateA.water,
+        sedimentOut: stateA.sediment,
+        velocityOut: stateA.velocity
+    }).compute(resolution * resolution)
+
+    let readIsA = true
+
+    const resetFromNoise = () => {
+        renderer.compute(initNodeA)
+        renderer.compute(copyBedAToBase)
+        renderer.compute(initVelocityA)
+        renderer.compute(initNodeB)
+        renderer.compute(initVelocityB)
+        renderer.compute(copyBedAToRender)
+        readIsA = true
+    }
+
+    const step = (iterations = 1) => {
+        const total = Math.max(1, Math.floor(iterations))
+
+        for (let i = 0; i < total; i += 1) {
+            if (readIsA) {
+                renderer.compute(rainAToScratch)
+                renderer.compute(fluxAToB)
+                renderer.compute(stateAToB)
+                renderer.compute(copyBedBToRender)
+            } else {
+                renderer.compute(rainBToScratch)
+                renderer.compute(fluxBToA)
+                renderer.compute(stateBToA)
+                renderer.compute(copyBedAToRender)
+            }
+
+            readIsA = !readIsA
+        }
+    }
+
+    const disposeNode = (node: any) => {
+        if (node && typeof node.dispose === 'function') {
+            node.dispose()
+        }
+    }
+
+    const dispose = () => {
+        bedRenderTexture.dispose()
+        bedBaseTexture.dispose()
+        waterScratch.dispose()
+
+        stateA.bed.dispose()
+        stateA.water.dispose()
+        stateA.sediment.dispose()
+        stateA.flux.dispose()
+        stateA.velocity.dispose()
+
+        stateB.bed.dispose()
+        stateB.water.dispose()
+        stateB.sediment.dispose()
+        stateB.flux.dispose()
+        stateB.velocity.dispose()
+
+        disposeNode(initNodeA)
+        disposeNode(copyBedAToBase)
+        disposeNode(initVelocityA)
+        disposeNode(initNodeB)
+        disposeNode(initVelocityB)
+        disposeNode(copyBedAToRender)
+        disposeNode(copyBedBToRender)
+        disposeNode(rainAToScratch)
+        disposeNode(rainBToScratch)
+        disposeNode(fluxAToB)
+        disposeNode(fluxBToA)
+        disposeNode(stateAToB)
+        disposeNode(stateBToA)
+    }
+
+    return {
+        bedTexture: bedRenderTexture,
+        resolution,
+        uniforms: erosionUniforms,
+        resetFromNoise,
+        step,
+        dispose
+    }
 }
