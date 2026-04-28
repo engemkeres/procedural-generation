@@ -49,7 +49,7 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
         0.1,
         1000
     )
-    camera.position.set(15, 2, 15)
+    camera.position.set(15, 8, 15)
     camera.lookAt(0, 0, 0)
 
     const controls = new PointerLockControls(camera, canvas)
@@ -72,7 +72,7 @@ export function initScene(canvas: HTMLCanvasElement): () => void {
 
     const terrainUniforms = createTerrainUniforms()
     const erosionUniforms = createErosionUniforms()
-    const erosionResolution = Math.floor((TERRAIN_RESOLUTION - 1) * 0.75 ) + 1
+    const erosionResolution = TERRAIN_RESOLUTION//Math.floor((TERRAIN_RESOLUTION - 1) * 0.75 ) + 1
     const erosionCompute = createErosionCompute(
         renderer,
         terrainUniforms,

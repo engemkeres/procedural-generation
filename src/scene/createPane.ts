@@ -104,7 +104,7 @@ export function createPane(
             erosionRate: erosionUniforms.uErosionRate.value as number,
             depositionRate: erosionUniforms.uDepositionRate.value as number,
             maxErosionDepth: erosionUniforms.uMaxErosionDepth.value as number,
-            batchIterations: 30000,
+            batchIterations: 2000,
             continuous: false,
             continuousIterationsPerFrame: 80
         }

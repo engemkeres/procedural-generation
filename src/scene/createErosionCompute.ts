@@ -64,16 +64,16 @@ export interface ErosionUniforms {
 
 export function createErosionUniforms(): ErosionUniforms {
     return {
-        uDt: uniform(float(0.025)),
+        uDt: uniform(float(0.02)),
         uGravity: uniform(float(9.81)), // ofc
-        uPipeArea: uniform(float(0.8)), // A
+        uPipeArea: uniform(float(0.6)), // A
         uPipeLength: uniform(float(TERRAIN_WORLD_STEP)), // l
-        uRainRate: uniform(float(0.0006)), // constant for each cell
-        uEvaporation: uniform(float(0.05)),
-        uSedimentCapacity: uniform(float(0.7)),
-        uDepositionRate: uniform(float(0.12)),
-        uErosionRate: uniform(float(0.08)),
-        uMaxErosionDepth: uniform(float(2.0)),
+        uRainRate: uniform(float(0.012)), // constant for each cell
+        uEvaporation: uniform(float(0.015)),
+        uSedimentCapacity: uniform(float(1.0)),
+        uDepositionRate: uniform(float(1.0)),
+        uErosionRate: uniform(float(0.5)),
+        uMaxErosionDepth: uniform(float(10.0)),
     }
 }
 
@@ -379,7 +379,7 @@ export function createErosionCompute(
         // fi(t+Δt, x, y) = K*f(t+Δt), where i = L, R, T, B
         const sumOut = fLBounded.add(fRBounded).add(fTBounded).add(fBBounded)
         const maxOut = d.mul(cellAreaNode).div(dt)
-        const scale = min(float(1.0), maxOut.div(sumOut)) // TODO: this is diff then??
+        const scale = min(float(1.0), maxOut.div(sumOut.add(float(0.0001)))) // TODO: this is diff then??
         // do I really need this?
         // const flowRetention = max(float(0.0), float(1.0).sub(erosionUniforms.uFlowDamping.mul(dt)))
 
@@ -498,7 +498,7 @@ export function createErosionCompute(
         const sumIn = inFromL.add(inFromR).add(inFromT).add(inFromB)
 
         const dCurrent = texture(waterIn, uvCoord).r
-        const dUpdated = dCurrent.add(erosionUniforms.uDt.mul(sumIn.sub(sumOut)).div(cellAreaNode))
+        const dUpdated = max(float(0.0), dCurrent.add(erosionUniforms.uDt.mul(sumIn.sub(sumOut)).div(cellAreaNode)))
 
         // calculate velocity using the outflow flux
         // velocity needed for the hydraulic erosion and deposition calculation
@@ -557,7 +557,7 @@ export function createErosionCompute(
 
         // Kdmax is max erosion depth parameter
         // itt ha magas a víz, akkor max 1 kapacitás - nem jó, pont fordítva kéne? 1 - valami már jó lehet.
-        const lmax = float(1.0).sub( saturate( dUpdated.div(erosionUniforms.uMaxErosionDepth)))
+        const lmax = float(1.0).sub(saturate( dUpdated.div(erosionUniforms.uMaxErosionDepth)))
 
         const N = normalize(vec3(dhdx.negate(), float(1.0), dhdz.negate()))
         const V = normalize(vec3(vX, float(0.0), vZ)) // shallow water is mostly horizontal anyways?
@@ -577,11 +577,22 @@ export function createErosionCompute(
         const Ks = erosionUniforms.uErosionRate
         const Kd = erosionUniforms.uDepositionRate
 
-        const erode = max(float(0.0), C.sub(s)).mul(Ks).mul(R).mul(dt)
+        const erodeRaw = max(float(0.0), C.sub(s)).mul(Ks).mul(R).mul(dt)
         const deposit = max(float(0.0), s.sub(C).mul(Kd).mul(R).mul(dt))
 
-        // max clamping makes sure only one of them happens, right?
-        const bUpdated = bCurrent.sub(erode).add(deposit) 
+        // clamp erosion to local relief so I don't dig pits deeper than neighbors
+        const minNeighbor = min(min(bL, bR), min(bT, bB))
+        const localRelief = max(float(0.0), bCurrent.sub(minNeighbor))
+        const erode = min(erodeRaw, localRelief)
+
+        // apply a floor to the bed so I never erode below the base terrain
+        const minBed = bBase.sub(erosionUniforms.uMaxErosionDepth)
+
+        // bUpdated before floor clamp
+        const bUpdated = bCurrent.sub(erode).add(deposit)
+        const bUpdatedClamped = max(minBed, bUpdated)
+
+        // update sediment and water using the actual eroded amount
         const sUpdated = max(float(0.0), s.add(erode).sub(deposit))
         const d3 = max(float(0.0), dUpdated.add(erode).sub(deposit))
 
@@ -596,7 +607,9 @@ export function createErosionCompute(
         const evap = max(float(0.0), float(1.0).sub(erosionUniforms.uEvaporation.mul(dt)))
         const dNext = max(float(0.0), d3.mul(evap))
 
-        const bFinal = bCurrent.add(bUpdated.sub(bCurrent).mul(keepMask))
+        // soften border updates slightly to avoid instant cliffs at the edges
+        const edgeFade = keepMask.add(float(0.01))
+        const bFinal = bCurrent.add(bUpdatedClamped.sub(bCurrent).mul(edgeFade))
         const dFinal = dNext.mul(keepMask)
         const sFinal = sNext.mul(keepMask)
         const vxFinal = vX.mul(keepMask)
