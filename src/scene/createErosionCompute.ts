@@ -510,8 +510,8 @@ export function createErosionCompute(
 
         // v(x,y) = ΔW(x,y)/d1(x,y)
         const depthSafe = max(dUpdated, float(0.0001)) // rather not divide by zero
-        const vX = wx.div(depthSafe)
-        const vZ = wz.div(depthSafe)
+        const vX = wx.div(depthSafe.mul(TERRAIN_WORLD_STEP))
+        const vZ = wz.div(depthSafe.mul(TERRAIN_WORLD_STEP))
         const vLen = length(vec2(vX, vZ))
 
         // TODO: remove bed base later if not needed for a fix
@@ -554,6 +554,7 @@ export function createErosionCompute(
 
         // sin(a) = sqrt(dhdx^2 + dhdz^2) / sqrt(1 + dhdx^2 + dhdz^2)
         const sinAlpha = slope.div(sqrt(float(1.0).add(slope.mul(slope))))
+        const slopeFactor = max(sinAlpha, float(0.2))
 
         // Kdmax is max erosion depth parameter
         // itt ha magas a víz, akkor max 1 kapacitás - nem jó, pont fordítva kéne? 1 - valami már jó lehet.
@@ -563,7 +564,9 @@ export function createErosionCompute(
         const V = normalize(vec3(vX, float(0.0), vZ)) // shallow water is mostly horizontal anyways?
 
         const collision = max(float(0.0), N.negate().dot(V))
+        // const collision = N.negate().dot(V)
         const capacity = erosionUniforms.uSedimentCapacity.mul(collision).mul(vLen).mul(lmax)
+        // const capacity = erosionUniforms.uSedimentCapacity.mul(slopeFactor).mul(vLen).mul(lmax)
 
         // okay so finally got capacity
         // if transported sediment st in cell(x,y) is smaller then capacity,
