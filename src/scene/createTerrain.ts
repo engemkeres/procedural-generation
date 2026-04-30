@@ -52,7 +52,7 @@ export function createTerrainUniforms(): TerrainUniforms {
     return {
         uFrequency: uniform(float(.2)),
         uAmplitude: uniform(float(6.)),
-        uOctaves: uniform(int(5)),
+        uOctaves: uniform(int(10)),
         uLacunarity: uniform(float(2.)),
         uGain: uniform(float(.5)),
         uTerrainMode: uniform(int(0)),
